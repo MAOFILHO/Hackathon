@@ -264,7 +264,7 @@ def generate_insights() -> list[dict]:
         ])
         ins = (prompt | structured(llm.sonnet(effort="low"), insight_parser)).invoke({"findings": r["findings"]})
         ins = verify_insight_amount(ins, [r])  # the amount comes from a tool, never from the model
-        sources = list({(s["document"], s["rows"]): s for s in r["sources"]}.values())
+        sources = citations.merge_sources(r["sources"])
         con.execute("DELETE FROM insights WHERE agent = ? AND status = 'new'", [agent])
         if finance.is_duplicate_insight(db.rows(con, "SELECT agent, title, status FROM insights"), agent, ins.title):
             continue

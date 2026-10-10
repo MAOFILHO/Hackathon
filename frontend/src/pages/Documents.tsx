@@ -159,7 +159,7 @@ export default function Documents() {
                 <div>
                   <h3 style={{ marginBottom: 2 }}>{doc.name} · extracted table</h3>
                   <div className="muted" style={{ fontSize: 13 }}>
-                    {doc.status === 'review' ? 'Check the column mapping, then confirm. ' : 'Indexed and visible to agents. '}
+                    {doc.status === 'review' ? (isTable ? 'Check the column mapping, then confirm. ' : 'Check the flagged Rows, then confirm. ') : 'Indexed and visible to agents. '}
                     {preview.transactions.length > 0 && 'Categories were auto-tagged for the Budget Coach.'}
                   </div>
                 </div>

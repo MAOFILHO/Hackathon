@@ -51,3 +51,17 @@ def test_generate_insights_stores_tool_calls_and_skips_duplicates_of_decided_one
     assert [r["agent"] for r in rows].count("Debt Analyzer") == 1  # duplicate of the dismissed one was not added
     fresh = [r for r in rows if r["agent"] == "Budget Coach"]
     assert json.loads(fresh[0]["evidence"]) == [{"tool": "get_debts", "rows": 4}]
+
+
+def test_an_insight_cites_each_document_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "_con", db.connect(tmp_path / "cite.duckdb"))
+    sources = [{"document": "Card.pdf", "rows": "row 140", "count": 1},
+               {"document": "Card.pdf", "rows": "rows 1–139", "count": 139},
+               {"document": "Loans.xlsx", "rows": "rows 1–3", "count": 3}]
+    monkeypatch.setattr(agents, "run_specialist", lambda name, task: {"agent": name, "findings": "f", "calls": [], "sources": sources})
+    monkeypatch.setattr(llm, "sonnet", lambda effort="low": None)
+    monkeypatch.setattr(agents, "structured", lambda model, parser: RunnableLambda(
+        lambda _: InsightOut(title="T", body="b", action_kind="add_to_plan")))
+    agents.generate_insights()
+    stored = json.loads(db.rows(db.get(), "SELECT sources FROM insights ORDER BY id")[0]["sources"])
+    assert [s["document"] for s in stored] == ["Card.pdf", "Loans.xlsx"]
