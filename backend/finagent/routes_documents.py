@@ -93,7 +93,8 @@ def reextract(doc_id: int, mapping: ingest.Mapping | None = None):
     path = _path(doc)
     if not path:
         raise HTTPException(409, "Original Document is not available to re-extract")
-    con.execute("UPDATE documents SET status = 'extracting' WHERE id = ?", [doc_id])
+    if doc["status"] != "ready":  # a ready Document stays visible to agents until the new read commits
+        con.execute("UPDATE documents SET status = 'extracting' WHERE id = ?", [doc_id])
     _ingest_job(doc_id, path, mapping, "ready" if doc["status"] == "ready" else "review")
     return document(doc_id)
 

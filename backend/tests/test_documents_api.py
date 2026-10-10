@@ -237,3 +237,21 @@ def test_agent_prompts_use_glossary_words():
     joined = " ".join(texts)
     assert not re.search(r"recommend", joined, re.I)           # an agent's finding is an Insight; its advice is a next step
     assert not re.search(r"numbered sources|the sources list", joined, re.I)  # these are Citations
+
+
+def test_a_ready_document_stays_ready_and_visible_while_it_is_read_again(client, monkeypatch):
+    from finagent import db, ingest
+
+    csv = "Txn Date,Narration,Amount\n2026-10-01,Corner Coffee cafe,-5.50\n"
+    doc = client.post("/api/documents", files={"file": ("new.csv", csv, "text/csv")}).json()["id"]
+    client.post(f"/api/documents/{doc}/confirm")
+    seen = {}
+    real = ingest.ingest
+
+    def spy(con, doc_id, path, mapping=None, status="review"):
+        seen["status"] = con.execute("SELECT status FROM documents WHERE id = ?", [doc_id]).fetchone()[0]
+        return real(con, doc_id, path, mapping, status)
+
+    monkeypatch.setattr(ingest, "ingest", spy)
+    client.post(f"/api/documents/{doc}/reextract")
+    assert seen["status"] == "ready"  # other readers keep seeing its Rows until the new read commits
