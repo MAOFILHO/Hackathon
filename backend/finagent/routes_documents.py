@@ -40,10 +40,18 @@ def documents():
 
 def _ingest_job(doc_id: int, path: Path, mapping: ingest.Mapping | None = None, status: str = "review") -> None:
     con = db.get()
+    had_rows = con.execute("SELECT row_count FROM documents WHERE id = ?", [doc_id]).fetchone()[0] > 0
+    con.execute("BEGIN TRANSACTION")  # all or nothing: a failed read must not leave a Document without its Rows
     try:
         ingest.ingest(con, doc_id, path, mapping, status)
-    except Exception as e:  # surface the failure on the Document instead of losing it
-        con.execute("UPDATE documents SET status = 'failed', error = ? WHERE id = ?", [str(e)[:200], doc_id])
+        con.execute("COMMIT")
+    except Exception as e:
+        con.execute("ROLLBACK")
+        message = str(e)[:200]
+        if had_rows:  # keep the Rows it already had and say why the new read failed
+            con.execute("UPDATE documents SET status = ?, error = ? WHERE id = ?", [status, message, doc_id])
+        else:
+            con.execute("UPDATE documents SET status = 'failed', error = ? WHERE id = ?", [message, doc_id])
 
 
 @router.post("/documents")
@@ -80,6 +88,8 @@ def document(doc_id: int):
 def reextract(doc_id: int, mapping: ingest.Mapping | None = None):
     con = db.get()
     doc = _doc(con, doc_id)
+    if doc["file_type"] not in ("csv", "xlsx", "pdf"):
+        raise HTTPException(409, "This Document cannot be read again")
     path = _path(doc)
     if not path:
         raise HTTPException(409, "Original Document is not available to re-extract")

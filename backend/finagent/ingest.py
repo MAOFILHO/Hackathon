@@ -101,7 +101,7 @@ EXTRACT_PROMPT = """Extract every financial row from this document.
 - Loan schedule: return each loan under debts (doc_type "debt").
 - Payslip: fill payslip (doc_type "income").
 - Receipt: doc_type "receipt" with one transaction for the total paid.
-Copy amounts exactly as printed. Do not invent rows."""
+Give each transaction the 1-based page number of the PDF page it is printed on. Copy amounts exactly as printed. Do not invent rows."""
 
 
 def extract_file(path: Path) -> Extraction:

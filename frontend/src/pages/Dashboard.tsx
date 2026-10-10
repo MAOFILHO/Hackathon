@@ -200,7 +200,7 @@ export default function Dashboard({ onAsk }: { onAsk: (q: string) => void }) {
               <div className="top"><span className={`tag ${AGENT_CLASS[i.agent]}`}>{i.agent}</span><span>{ago(i.created_at)}</span></div>
               <h4>{i.title}</h4>
               <p>{i.body}</p>
-              {i.sources.length > 0 && <div className="src">Source: {i.sources.map((s, k) => <span key={k}>{s.document} · {s.rows}{k < i.sources.length - 1 ? ', ' : ''}</span>)}</div>}
+              {i.sources.length > 0 && <div className="src">Citations: {i.sources.map((s, k) => <span key={k}>{s.document} · {s.rows}{k < i.sources.length - 1 ? ', ' : ''}</span>)}</div>}
               {why === i.id && (
                 <div className="src">
                   <div>Tool calls: {i.evidence.length ? i.evidence.map((c) => `${c.tool}${c.rows == null ? '' : ` (${c.rows} rows)`}`).join(', ') : 'not recorded'}</div>
@@ -212,7 +212,7 @@ export default function Dashboard({ onAsk }: { onAsk: (q: string) => void }) {
                   <>
                     <button className="btn small" onClick={() => act(i, 'dismiss')}>Dismiss</button>
                     <button className="btn small primary" onClick={() => act(i, 'add_to_plan')}>
-                      {i.action_kind === 'set_cap' ? 'Set cap' : 'Add to plan'}
+                      {i.action_kind === 'set_cap' && i.action_payload.amount ? 'Set cap' : 'Add to plan'}
                     </button>
                   </>
                 )}

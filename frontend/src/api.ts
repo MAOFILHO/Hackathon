@@ -4,6 +4,8 @@ export type Flow = 'income' | 'spending' | 'transfer' | 'debt_service'
 export type Strategy = 'avalanche' | 'snowball' | 'custom'
 export type AgentName = 'Debt Analyzer' | 'Payoff Optimizer' | 'Budget Coach' | 'Savings Strategist'
 export type DocType = 'spending' | 'debt' | 'income' | 'receipt'
+/** A table (CSV or XLSX) can only be Spending or Debt. */
+export type TableDocType = 'spending' | 'debt'
 
 export interface Transaction {
   row_no: number
@@ -46,7 +48,7 @@ export interface Mapping {
   amount: string | null
   debit: string | null
   credit: string | null
-  doc_type: DocType
+  doc_type: TableDocType
 }
 
 export interface DocPreview {

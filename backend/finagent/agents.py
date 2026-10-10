@@ -22,7 +22,7 @@ COMMON = ("You are part of FinAgent, a personal financial coach for {user}. Toda
           "Only use numbers that come from your tools; never estimate or do arithmetic in your head when a tool can. "
           "Spending excludes Transfers (card payments, moves to savings) and Debt Service (installments, interest, fees). "
           "Write dates as 'Apr 2028', never as 2028-04-01. A month named without a year, such as 'March', means its next occurrence after today. "
-          "Be concise: findings with exact figures, then one concrete recommendation.")
+          "Be concise: findings with exact figures, then one concrete next step.")
 
 SPECIALISTS: dict[str, tuple[str, list]] = {
     "Debt Analyzer": ("You analyze the user's Debt Accounts: balances, APRs, and what each costs per month in interest. "
@@ -64,7 +64,7 @@ class Cut(BaseModel):
 
 class Answer(BaseModel):
     markdown: str = Field(description="Final answer for the user in Markdown. Use a table when comparing accounts or options.")
-    cuts: list[Cut] = Field(default_factory=list, description="Proposed Budget Caps, only if spending cuts were recommended")
+    cuts: list[Cut] = Field(default_factory=list, description="Proposed Budget Caps, only if spending cuts are proposed")
 
 
 class InsightOut(BaseModel):
@@ -91,11 +91,11 @@ ROUTE_PROMPT = ChatPromptTemplate.from_messages([
 ANSWER_PROMPT = ChatPromptTemplate.from_messages([
     ("system", COMMON + " You write the final answer from the specialists' findings. Lead with the direct answer and "
                "the key date or amount in bold. Keep it under 180 words plus an optional table. In a table comparing strategies, title its first column 'Payoff Strategy'. Do not do arithmetic: quote figures from the findings only. Do not invent numbers; "
-               "if the findings lack a number, say what is missing. If you recommend cutting spending, fill cuts with one proposed "
+               "if the findings lack a number, say what is missing. If you propose cutting spending, fill cuts with one proposed "
                "Budget Cap per category using the figures from the propose_caps findings; never invent a cap. Cite your figures: put the marker [n] right after "
-               "each figure or claim, where n is the number of the matching entry in the numbered sources list. Use only numbers "
+               "each figure or claim, where n is the number of the matching entry in the numbered Citations list. Use only numbers "
                "that appear in that list; never cite a source that does not back the figure."),
-    ("human", "Question: {question}\n\nSpecialist findings:\n{findings}\n\nNumbered sources:\n{sources}"),
+    ("human", "Question: {question}\n\nSpecialist findings:\n{findings}\n\nNumbered Citations:\n{sources}"),
 ])
 
 

@@ -48,10 +48,11 @@ def act_on_insight(insight_id: int, body: InsightAction):
         con.execute("UPDATE insights SET status = 'dismissed' WHERE id = ?", [insight_id])
         return {"id": insight_id, "status": "dismissed"}
     payload = json.loads(ins["action_payload"])
-    if ins["action_kind"] == "set_cap" and payload.get("category") and payload.get("amount"):
+    cap_set = ins["action_kind"] == "set_cap" and bool(payload.get("category") and payload.get("amount"))
+    if cap_set:
         con.execute("INSERT OR REPLACE INTO budget_caps VALUES (?, ?)", [payload["category"], payload["amount"]])
     con.execute("UPDATE insights SET status = 'in_plan' WHERE id = ?", [insight_id])
-    return {"id": insight_id, "status": "in_plan"}
+    return {"id": insight_id, "status": "in_plan", "cap_set": cap_set}
 
 
 class PayoffChoice(BaseModel):

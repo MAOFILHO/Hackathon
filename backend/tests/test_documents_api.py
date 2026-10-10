@@ -164,3 +164,76 @@ def test_error_messages_say_document_not_file(tmp_path, monkeypatch):
         assert bad.status_code == 400 and "Unsupported Document type" in bad.json()["detail"]
         assert c.post("/api/payoff-strategy", json={"strategy": "avalanche", "extra_monthly": 100}).status_code == 200
         assert c.post("/api/plan/payoff", json={"strategy": "avalanche", "extra_monthly": 100}).status_code == 404
+
+
+# --- Review fixes: failed re-extract, unreadable Documents, Set cap honesty -------------------
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    from finagent import db, llm
+    from finagent.api import app
+
+    monkeypatch.setattr(llm, "available", lambda: False)
+    monkeypatch.setattr(db, "_con", db.connect(tmp_path / "rv.duckdb"))
+    with TestClient(app) as c:
+        yield c
+
+
+def test_failed_re_extract_keeps_the_rows_and_the_ready_status(client):
+    from finagent import db
+
+    csv = "Txn Date,Narration,Amount\n2026-10-01,Corner Coffee cafe,-5.50\n"
+    doc = client.post("/api/documents", files={"file": ("new.csv", csv, "text/csv")}).json()["id"]
+    assert client.post(f"/api/documents/{doc}/confirm").json()["status"] == "ready"
+
+    bad = {"date": "No such column", "description": "Narration", "amount": "Amount", "doc_type": "spending"}
+    client.post(f"/api/documents/{doc}/reextract", json=bad)
+
+    con = db.get()
+    assert con.execute("SELECT count(*) FROM transactions WHERE document_id = ?", [doc]).fetchone()[0] == 1
+    row = db.rows(con, "SELECT status, error FROM documents WHERE id = ?", [doc])[0]
+    assert row["status"] == "ready" and row["error"]
+
+
+def test_documents_that_cannot_be_read_again_are_refused(client):
+    from finagent import db
+
+    receipt = db.rows(db.get(), "SELECT id FROM documents WHERE file_type = 'jpg'")[0]["id"]
+    assert client.post(f"/api/documents/{receipt}/reextract").status_code == 409
+
+
+def test_set_cap_without_an_amount_adds_to_the_plan_but_says_no_cap_was_set(client):
+    from finagent import db
+
+    con = db.get()
+    for i, amount in ((9001, None), (9002, 450.0)):
+        con.execute("INSERT INTO insights (id, agent, title, body, action_kind, action_payload, sources, status, created_at) "
+                    "VALUES (?, 'Budget Coach', 't', 'b', 'set_cap', ?, '[]', 'new', now())",
+                    [i, '{"category": "Dining out", "amount": %s}' % ("null" if amount is None else amount)])
+    none = client.post("/api/insights/9001", json={"action": "add_to_plan"}).json()
+    some = client.post("/api/insights/9002", json={"action": "add_to_plan"}).json()
+    assert none == {"id": 9001, "status": "in_plan", "cap_set": False}
+    assert some == {"id": 9002, "status": "in_plan", "cap_set": True}
+    assert db.rows(con, "SELECT category, monthly_cap FROM budget_caps") == [{"category": "Dining out", "monthly_cap": 450.0}]
+
+
+def test_extraction_prompt_asks_for_the_page_number():
+    from finagent import ingest
+
+    assert "page" in ingest.EXTRACT_PROMPT.lower()
+
+
+def test_agent_prompts_use_glossary_words():
+    import re
+
+    from finagent import agents
+
+    texts = [agents.COMMON, *(p for p, _ in agents.SPECIALISTS.values()), *agents.INSIGHT_TASKS.values(),
+             *(str(m.prompt.template) for m in agents.ANSWER_PROMPT.messages)]
+    joined = " ".join(texts)
+    assert not re.search(r"recommend", joined, re.I)           # an agent's finding is an Insight; its advice is a next step
+    assert not re.search(r"numbered sources|the sources list", joined, re.I)  # these are Citations

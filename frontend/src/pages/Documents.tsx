@@ -241,7 +241,7 @@ export default function Documents() {
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#8fd3b0" strokeWidth="1.8"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /></svg>
         <div>
           <b>Your data stays yours</b>
-          <p>Account numbers are masked in every stored row before agents see them. Claude reads a PDF or image once to extract its rows. Delete a document and its rows, and any insight that cites it, are removed.</p>
+          <p>Account numbers are masked in every stored row before agents see them. Claude reads a PDF once to extract its Rows. Delete a Document and its Rows, and any Insight that cites it, are removed.</p>
         </div>
       </div>
     </>

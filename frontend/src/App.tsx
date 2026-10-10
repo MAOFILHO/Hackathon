@@ -71,7 +71,7 @@ export default function App() {
         {!llm && (
           <div className="banner">
             Agents are offline: add <span className="mono">ANTHROPIC_API_KEY</span> to <span className="mono">backend/.env</span> and
-            restart the backend. The dashboard and CSV/XLSX uploads still work.
+            restart the backend. The dashboard and adding CSV or XLSX Documents still work.
           </div>
         )}
         {page === 'dashboard' && <Dashboard key={refreshKey} onAsk={ask} />}
