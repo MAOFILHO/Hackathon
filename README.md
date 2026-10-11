@@ -1,3 +1,9 @@
+---
+title: FinAgent
+sdk: docker
+app_port: 7860
+---
+
 # AI Financial Agent
 
 A personal financial coach. 4 specialist agents (Debt Analyzer, Payoff Optimizer, Budget Coach, Savings Strategist)
@@ -33,6 +39,29 @@ PDF reading need the key. Uploads accept CSV, XLSX and PDF only (the sample rece
 4. **Documents**: delete `Card_Activity_Apr-Oct.pdf`, re-upload it from `backend/data/samples/`. Claude reads the PDF live
    (139 rows, about 50 s; a timer shows progress, so talk through what is happening). Fix a *Review* row's category, then *Confirm & index*.
    If a re-upload leaves the card statement duplicated, run `curl -X POST localhost:8000/api/demo/reset` to restore the 5 sample Documents.
+
+## Deploy to a Hugging Face Space (public link with a password)
+
+The `Dockerfile` builds the frontend and serves it from the backend, so the team gets one link.
+
+1. On huggingface.co create a **Space**: SDK **Docker**, visibility **Public**.
+2. Space **Settings → Variables and secrets**, add these **Secrets**:
+   - `ANTHROPIC_API_KEY`: your key
+   - `APP_PASSWORD`: the shared password for your team (the browser asks for it; any user name works)
+   - `ANTHROPIC_WORKSPACE_ID`: only if your key is not scoped to a workspace
+3. Push this repo to the Space (the Space is a git repo):
+   ```bash
+   git remote add space https://huggingface.co/spaces/<your-user>/<space-name>
+   git push space main
+   ```
+4. Open `https://<your-user>-<space-name>.hf.space`. The first build takes a few minutes.
+
+Good to know:
+- The container sets `REQUIRE_PASSWORD=1`: **without `APP_PASSWORD` the app refuses to start**, so it can never go live open.
+- The disk resets on every restart: the 5 sample Documents reload and uploads are lost.
+- Free Spaces sleep after inactivity and take about a minute to wake.
+- Set a spend limit on your Anthropic workspace. Everyone with the password uses your key.
+- Try the image locally first: `docker build -t finagent . && docker run --rm -p 7860:7860 -e APP_PASSWORD=test -e ANTHROPIC_API_KEY=... finagent`.
 
 ## Tests
 

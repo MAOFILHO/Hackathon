@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from sse_starlette import EventSourceResponse
 
-from . import agents, db, finance, llm, routes_documents, routes_plan, seed
+from . import agents, db, finance, llm, routes_documents, routes_plan, seed, web
 
 
 @asynccontextmanager
@@ -70,3 +70,6 @@ def chat(q: Question):
         yield {"event": "trace", "data": json.dumps({"type": "end"})}
 
     return EventSourceResponse(events())
+
+
+web.install_from_env(app)  # last: the frontend mount at "/" must come after every API route
