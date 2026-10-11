@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "finagent-backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd backend && exec uv run uvicorn finagent.api:app --port 8000"],
+      "port": 8000
+    },
+    {
+      "name": "finagent-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}
