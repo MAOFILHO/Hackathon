@@ -47,4 +47,33 @@ cd backend && uv run pytest -q
 - `backend/finagent/ingest.py`: CSV/XLSX parsing, Claude PDF extraction, Haiku categorization
 - `backend/finagent/agents.py`, `tools.py`: LangGraph orchestration and the agents' tools (read-only SQL over DuckDB views)
 - `frontend/src/pages/`: Dashboard, Advisor, Documents
+
+## Web Application Screenshots
+
+<img width="1195" height="864" alt="Screenshot 2026-10-11 at 10 31 08 AM" src="https://github.com/user-attachments/assets/ecb0602a-c38e-4a9b-8dea-9e9554cb268e" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1151" height="861" alt="Screenshot 2026-10-11 at 10 38 54 AM" src="https://github.com/user-attachments/assets/bf2deec5-393e-4a21-bc1e-ba5630fbc15a" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1187" height="857" alt="Screenshot 2026-10-11 at 10 31 45 AM" src="https://github.com/user-attachments/assets/0f855f27-1aeb-4bbc-8e09-46999301fd10" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1162" height="862" alt="Screenshot 2026-10-11 at 10 32 21 AM" src="https://github.com/user-attachments/assets/3263b887-6f41-431f-9ca3-7f8c7421179d" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1162" height="861" alt="Screenshot 2026-10-11 at 10 31 03 AM" src="https://github.com/user-attachments/assets/8befde50-885f-4336-84cf-8fd0fd8e192b" />
+<img width="100%" height="1" alt="" src="https://github.com/user-attachments/assets/f2af28ee-a373-4488-89e5-2b84d5da9620" />
+<br><br>
+
+<img width="1177" height="861" alt="Screenshot 2026-10-11 at 10 32 44 AM" src="https://github.com/user-attachments/assets/e5948a4b-3931-46f5-91ad-59ae5f690a05" />
+
+
+
+
+
 # Hackathon
