@@ -1,4 +1,4 @@
-# FinAgent
+# AI Financial Agent
 
 A personal financial coach. 4 specialist agents (Debt Analyzer, Payoff Optimizer, Budget Coach, Savings Strategist)
 read the user's own Documents and answer with numbers cited back to their Rows. Vocabulary: see `CONTEXT.md`.
