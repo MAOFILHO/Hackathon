@@ -60,6 +60,8 @@ export interface DocPreview {
   payslips: Payslip[]
   needs_review: number
   categories: string[]
+  /** All Rows in the Document; `transactions` holds only the requested preview. */
+  row_count?: number
 }
 
 export interface PayoffAccount { name: string; apr: number; balance: number; paid_off: string | null }
@@ -76,6 +78,7 @@ export interface Payoff {
 }
 
 export interface Dashboard {
+  user?: string
   as_of: string
   month_label: string
   income: { value: number; note: string; payslip_net: number | null; matches_bank: boolean | null }
@@ -139,11 +142,11 @@ export const api = {
   insights: () => call<Insight[]>('/insights'),
   refreshInsights: () => post<Insight[]>('/insights/refresh'),
   actOnInsight: (id: number, action: 'add_to_plan' | 'dismiss') => post(`/insights/${id}`, { action }),
-  setPayoff: (strategy: string, extra_monthly: number, order?: string[]) =>
+  setPayoff: (strategy: Strategy, extra_monthly: number, order?: string[]) =>
     post<Payoff>('/payoff-strategy', { strategy, extra_monthly, order }),
   setCaps: (caps: { category: string; monthly_cap: number }[]) => post('/budget-caps', caps),
   documents: () => call<Doc[]>('/documents'),
-  document: (id: number) => call<DocPreview>(`/documents/${id}`),
+  document: (id: number, limit?: number) => call<DocPreview>(`/documents/${id}${limit ? `?limit=${limit}` : ''}`),
   upload: (file: File) => {
     const form = new FormData()
     form.append('file', file)

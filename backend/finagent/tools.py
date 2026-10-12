@@ -14,19 +14,29 @@ def _out(result, views: list[str], sources: list[dict] | None = None) -> str:
     return json.dumps({"result": result, "sources": sources or citations.sources_for(db.get(), views)}, default=str)
 
 
+_VIEW_NAMES = re.compile("|".join(db.AGENT_VIEWS))
+_VIEW_LIST = ";\n    ".join(f"{view}({columns})" for view, columns in db.AGENT_VIEWS.items())
+
+
+def _describe(text: str):
+    """Use `text` as the tool's description (the model reads it), so it can be built from constants."""
+    def apply(fn):
+        fn.__doc__ = text
+        return fn
+
+    return apply
+
+
 @tool
+@_describe(f"""Run one read-only DuckDB SELECT over the user's data. Views:
+    {_VIEW_LIST}.
+    Spending means flow = 'spending' (refunds are positive spending rows). Returns at most 200 rows.""")
 def run_sql(query: str) -> str:
-    """Run one read-only DuckDB SELECT over the user's data. Views:
-    v_transactions(date, description, amount [negative = money out], category, flow [income|spending|transfer|debt_service], needs_review, document, row_no, page [PDF page or null]);
-    v_debts(name, kind, balance, apr [0.299 = 29.9%], min_payment, due_day, document, row_no);
-    v_payslips(period, employer, gross, net, document, row_no);
-    v_budget_caps(category, monthly_cap).
-    Spending means flow = 'spending' (refunds are positive spending rows). Returns at most 200 rows."""
     try:
         rows = db.agent_sql(db.get(), query)
     except db.AgentSQLError as e:
         return json.dumps({"error": str(e)})
-    return _out(rows, re.findall(r"v_transactions|v_debts|v_payslips", query), citations.sources_from_result(rows))
+    return _out(rows, _VIEW_NAMES.findall(query), citations.sources_from_result(rows))
 
 
 @tool
@@ -82,14 +92,14 @@ def debt_cost() -> str:
 
 
 @tool
+@_describe(f"""Proposed monthly Budget Caps from Spending over the last N days: category, last_30_days, proposed_cap.
+    Only discretionary categories get a cap ({config.CAP_SHARE:.0%} of the figure, rounded to $5). Use these caps verbatim.""")
 def propose_caps(days: int = 30) -> str:
-    """Proposed monthly Budget Caps from Spending over the last N days: category, last_30_days, proposed_cap.
-    Only discretionary categories get a cap (75% of the figure, rounded to $5). Use these caps verbatim."""
     return _out(finance.propose_caps(finance.spend_by_category(db.get(), days)), ["v_transactions"])
 
 
 @tool
-def savings_plan_tool(target_months: float = config.EMERGENCY_FUND_MONTHS) -> str:
+def savings_goal(target_months: float = config.EMERGENCY_FUND_MONTHS) -> str:
     """Monthly auto-save amount (the surplus of the last full month), months to the emergency fund goal and the goal date.
     Always use this; never estimate."""
     con = db.get()
@@ -97,6 +107,6 @@ def savings_plan_tool(target_months: float = config.EMERGENCY_FUND_MONTHS) -> st
     ef = finance.emergency_fund(con, target_months, today)
     start, end = finance.last_full_month(today)
     m = finance.summarize(finance.load_txns(con), start, end)
-    plan = finance.savings_plan(m.income - m.spending - m.debt_service, ef["saved"], ef["monthly_need"], target_months, today)
-    return _out({**plan, "saved": ef["saved"], "monthly_need": ef["monthly_need"], "target_months": target_months},
+    goal = finance.savings_goal(m.income - m.spending - m.debt_service, ef["saved"], ef["monthly_need"], target_months, today)
+    return _out({**goal, "saved": ef["saved"], "monthly_need": ef["monthly_need"], "target_months": target_months},
                 ["v_transactions"])

@@ -31,5 +31,6 @@ def haiku() -> ChatAnthropic:
 
 
 def structured(model: ChatAnthropic, parser: PydanticOutputParser):
-    """model constrained to the parser's JSON schema, then validated by a PydanticOutputParser."""
+    """model constrained to the parser's Pydantic schema; the parser is used only for its `.pydantic_object`,
+    and validation happens inside `with_structured_output(..., method="json_schema")`."""
     return model.with_structured_output(parser.pydantic_object, method="json_schema")

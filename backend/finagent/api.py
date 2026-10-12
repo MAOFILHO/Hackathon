@@ -1,6 +1,7 @@
 """FastAPI app. Run: uv run uvicorn finagent.api:app --reload --port 8000"""
 
 import json
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -9,7 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from sse_starlette import EventSourceResponse
 
-from . import agents, db, finance, llm, routes_documents, routes_plan, seed, web
+from . import agents, config, db, finance, llm, routes_documents, routes_plan, seed, web
 
 
 @asynccontextmanager
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
+log = logging.getLogger(__name__)
 app = FastAPI(title="FinAgent", lifespan=lifespan)
 app.include_router(routes_documents.router)
 app.include_router(routes_plan.router)
@@ -32,7 +34,7 @@ def health():
 
 @app.get("/api/dashboard")
 def dashboard():
-    return jsonable_encoder(finance.dashboard(db.get()))
+    return {**jsonable_encoder(finance.dashboard(db.get())), "user": config.USER_NAME}
 
 
 @app.get("/api/agents")
@@ -62,8 +64,9 @@ def chat(q: Question):
         try:
             for chunk in agents.graph.stream({"question": q.question, "history": agents.conversation(q.history)}, stream_mode="custom", version="v2"):
                 yield {"event": "trace", "data": json.dumps(jsonable_encoder(chunk["data"]))}
-        except Exception as e:
-            yield {"event": "trace", "data": json.dumps({"type": "error", "message": str(e)[:300]})}
+        except Exception:
+            log.exception("Advisor graph failed")
+            yield {"event": "trace", "data": json.dumps({"type": "error", "message": "The advisor hit a problem. Please try again."})}
         finally:
             for k in agents.STATUS:
                 if agents.STATUS[k] == "running":

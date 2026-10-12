@@ -26,11 +26,12 @@ export default function App() {
   const [question, setQuestion] = useState<string | null>(null)
   const [agents, setAgents] = useState<Record<string, string>>({})
   const [llm, setLlm] = useState(true)
+  const [agentsErr, setAgentsErr] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     api.health().then((h) => setLlm(h.llm)).catch(() => setLlm(false))
-    const tick = () => api.agents().then(setAgents).catch(() => {})
+    const tick = () => api.agents().then((x) => { setAgents(x); setAgentsErr(false) }).catch(() => setAgentsErr(true))
     tick()
     const id = setInterval(tick, 1500)
     return () => clearInterval(id)
@@ -59,6 +60,7 @@ export default function App() {
           <button className={page === 'documents' ? 'active' : ''} onClick={() => go('documents')}><Icon name="sources" />Documents</button>
         </nav>
         <h4>AGENTS</h4>
+        {agentsErr && <p className="error">Agent status unavailable</p>}
         {Object.entries(agents).map(([name, status]) => (
           <div className="agent-row" key={name}>
             <span className={`dot ${status}`} />

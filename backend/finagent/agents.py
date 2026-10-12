@@ -29,7 +29,7 @@ SPECIALISTS: dict[str, tuple[str, list]] = {
                       "Call get_debts and debt_cost once each. Do not simulate payoffs or analyse spending; other agents do that.",
                       [tools.get_debts, tools.debt_cost]),
     "Payoff Optimizer": ("You compare Payoff Strategies (avalanche = highest APR first, snowball = smallest balance first) "
-                         "Call compare_payoff once with exactly the extra monthly amount the user stated (use 500 if none), then "
+                         f"Call compare_payoff once with exactly the extra monthly amount the user stated (use {config.DEFAULT_EXTRA_MONTHLY:g} if none), then "
                          "call simulate_payoff once with that same amount for the cheaper strategy. Report debt-free dates, "
                          "interest and payoff order.",
                          [tools.get_debts, tools.simulate_payoff, tools.compare_payoff]),
@@ -39,11 +39,11 @@ SPECIALISTS: dict[str, tuple[str, list]] = {
                      "adjust a cap yourself, and propose no cap for a category propose_caps omits. Unused or duplicate "
                      "subscriptions are good targets.",
                      [tools.spending_by_category, tools.propose_caps, tools.money_summary, tools.run_sql]),
-    "Savings Strategist": (f"You plan savings: emergency fund coverage (target {config.EMERGENCY_FUND_MONTHS} months of Spending + Debt Service), "
-                           "Savings Rate versus the 25% target, and a monthly auto-save amount. Call emergency_fund, then call "
-                           f"savings_plan_tool with target_months={config.EMERGENCY_FUND_MONTHS}. Quote its monthly_amount and goal_date exactly; never "
+    "Savings Strategist": (f"You advise on savings: emergency fund coverage (target {config.EMERGENCY_FUND_MONTHS} months of Spending + Debt Service), "
+                           f"Savings Rate versus the {config.SAVINGS_TARGET:.0%} target, and a monthly auto-save amount. Call emergency_fund, then call "
+                           f"savings_goal with target_months={config.EMERGENCY_FUND_MONTHS}. Quote its monthly_amount and goal_date exactly; never "
                            "work out an amount or a date yourself. If it has no goal_date, say the surplus is too small.",
-                           [tools.emergency_fund, tools.savings_plan_tool, tools.money_summary, tools.run_sql]),
+                           [tools.emergency_fund, tools.savings_goal, tools.money_summary, tools.run_sql]),
 }
 
 STATUS: dict[str, str] = {"Orchestrator": "idle", **{n: "idle" for n in SPECIALISTS}}
@@ -73,7 +73,7 @@ def conversation(history: list[Turn]) -> str:
     return f"Earlier in this conversation:\n{turns}\n\nThe question below may refer to it.\n\n"
 
 
-class Cut(BaseModel):
+class CapProposal(BaseModel):
     category: str
     last_30_days: float
     proposed_cap: float | None  # None when no tool computed it; verify_cuts sets this
@@ -81,7 +81,7 @@ class Cut(BaseModel):
 
 class Answer(BaseModel):
     markdown: str = Field(description="Final answer for the user in Markdown. Use a table when comparing accounts or options.")
-    cuts: list[Cut] = Field(default_factory=list, description="Proposed Budget Caps, only if spending cuts are proposed")
+    cuts: list[CapProposal] = Field(default_factory=list, description="Proposed Budget Caps, only if spending cuts are proposed")
 
 
 class InsightOut(BaseModel):
@@ -184,7 +184,7 @@ def specialist(state: State) -> State:
 
 
 def payoff_choice(results: list[dict]) -> dict | None:
-    """The Payoff Strategy and extra payment the answer settled on, for the 'Apply plan' button."""
+    """The Payoff Strategy and extra payment the answer settled on, for the 'Apply Payoff Strategy' button."""
     choice = None
     for r in results:
         for c in r["calls"]:
@@ -206,8 +206,8 @@ def _latest_result(results: list[dict], tool: str):
     return found
 
 
-def verify_cuts(cuts: list[Cut], results: list[dict]) -> list[Cut]:
-    """Overwrite each Cut's figures with the propose_caps result for its category; None if no tool computed it."""
+def verify_cuts(cuts: list[CapProposal], results: list[dict]) -> list[CapProposal]:
+    """Overwrite each CapProposal's figures with the propose_caps result for its category; None if no tool computed it."""
     proposed = {r["category"].casefold(): r for r in _latest_result(results, "propose_caps") or []}
     out = []
     for c in cuts:
@@ -218,14 +218,14 @@ def verify_cuts(cuts: list[Cut], results: list[dict]) -> list[Cut]:
 
 
 def verify_insight_amount(insight: InsightOut, results: list[dict]) -> InsightOut:
-    """Replace the model's amount with the tool's: set_cap from propose_caps, auto_save from savings_plan_tool; else None."""
+    """Replace the model's amount with the tool's: set_cap from propose_caps, auto_save from savings_goal; else None."""
     amount = None
     if insight.action_kind == "set_cap" and insight.category:
         match = [r for r in _latest_result(results, "propose_caps") or [] if r["category"].casefold() == insight.category.casefold()]
         amount = match[0]["proposed_cap"] if match else None
     elif insight.action_kind == "auto_save":
-        plan = _latest_result(results, "savings_plan_tool")
-        amount = plan["monthly_amount"] if plan else None
+        goal = _latest_result(results, "savings_goal")
+        amount = goal["monthly_amount"] if goal else None
     return insight.model_copy(update={"amount": amount})
 
 
@@ -267,7 +267,7 @@ graph = (
 INSIGHT_TASKS = {
     "Debt Analyzer": "Find the single most expensive problem in the user's debts and a concrete fix.",
     "Budget Coach": "Find the one Spending category most over a sensible level this month and propose a monthly cap using propose_caps.",
-    "Savings Strategist": "Assess the emergency fund and propose a monthly auto-save amount and the month it reaches 6 months.",
+    "Savings Strategist": f"Assess the emergency fund and propose a monthly auto-save amount and the month it reaches {config.EMERGENCY_FUND_MONTHS} months.",
 }
 INSIGHT_ACTION = {"Debt Analyzer": "add_to_plan", "Budget Coach": "set_cap", "Savings Strategist": "auto_save"}
 

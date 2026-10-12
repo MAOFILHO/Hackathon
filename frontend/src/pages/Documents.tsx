@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, pct, usd, type Doc, type DocPreview, type Mapping } from '../api'
 
+const MAX_PREVIEW = 1000  // the backend's cap on ?limit
 const TYPE_LABEL: Record<string, string> = { spending: 'Spending', debt: 'Debt', income: 'Income', receipt: 'Receipt' }
 
 function docMeta(d: Doc) {
@@ -94,7 +95,14 @@ export default function Documents() {
     setPreview((p) => p && { ...p, needs_review: p.needs_review - 1, transactions: p.transactions.map((x) => (x.row_no === row ? t : x)) })
   }
 
+  const loadAll = async () => {
+    if (!selected || !preview) return
+    setBusy(true)
+    try { setPreview(await api.document(selected, Math.min(total, MAX_PREVIEW))); setShowAll(true) } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+  }
+
   const doc = docs.find((d) => d.id === selected)
+  const total = preview?.row_count ?? doc?.row_count ?? 0
   const elapsed = doc ? Math.round((Date.now() - (startedAt.current[doc.id] ?? Date.now())) / 1000) : 0
   const rows = preview ? (showAll ? preview.transactions : preview.transactions.slice(0, 8)) : []
   const isTable = doc && (doc.file_type === 'csv' || doc.file_type === 'xlsx')
@@ -207,8 +215,11 @@ export default function Documents() {
                     </tbody>
                   </table>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontSize: 13 }} className="muted">
-                    <span>Showing {rows.length} of {doc.row_count} rows · {preview.needs_review} need review</span>
-                    {preview.transactions.length > 8 && <button className="btn small" style={{ border: 0, color: 'var(--green)', textDecoration: 'underline', background: 'none' }} onClick={() => setShowAll(!showAll)}>{showAll ? 'Show fewer' : 'Show more rows'}</button>}
+                    <span>Showing {rows.length} of {total} rows · {preview.needs_review} need review</span>
+                    <span>
+                      {preview.transactions.length > 8 && <button className="btn small" style={{ border: 0, color: 'var(--green)', textDecoration: 'underline', background: 'none' }} onClick={() => setShowAll(!showAll)}>{showAll ? 'Show fewer' : 'Show more rows'}</button>}
+                      {preview.transactions.length < total && <button className="btn small" style={{ border: 0, color: 'var(--green)', textDecoration: 'underline', background: 'none' }} onClick={loadAll} disabled={busy}>{total > MAX_PREVIEW ? `Show first ${MAX_PREVIEW} rows` : `Show all ${total} rows`}</button>}
+                    </span>
                   </div>
                 </>
               )}

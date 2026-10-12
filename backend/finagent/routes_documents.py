@@ -2,9 +2,9 @@
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
@@ -73,10 +73,11 @@ async def upload(file: UploadFile, background: BackgroundTasks):
 
 
 @router.get("/documents/{doc_id}")
-def document(doc_id: int):
+def document(doc_id: int, limit: Annotated[int, Query(ge=1, le=1000)] = 50):
     con = db.get()
     doc = _doc(con, doc_id)
-    out = ingest.preview(con, doc_id, _path(doc))
+    out = ingest.preview(con, doc_id, _path(doc), limit)
+    out["row_count"] = doc["row_count"]  # all Rows in the Document, not just the ones previewed
     if doc["file_type"] in ("csv", "xlsx") and (p := _path(doc)):
         out["mapping"] = (json.loads(doc["mapping"]) if doc["mapping"]
                           else ingest.guess_mapping(ingest.read_table(p)).model_dump())

@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
 from finagent import agents, db, finance, llm, seed
-from finagent.agents import Cut, InsightOut, payoff_choice, verify_cuts, verify_insight_amount
+from finagent.agents import CapProposal, InsightOut, payoff_choice, verify_cuts, verify_insight_amount
 
 
 def call(tool, **args):
@@ -44,27 +44,27 @@ def done(tool, result, **args):
 
 CAPS = done("propose_caps", [{"category": "Dining out", "last_30_days": 412.4, "proposed_cap": 310.0},
                              {"category": "Shopping", "last_30_days": 100.0, "proposed_cap": 75.0}], days=30)
-PLAN = done("savings_plan_tool", {"monthly_amount": 650.0, "months_to_goal": 14}, target_months=6)
+GOAL = done("savings_goal", {"monthly_amount": 650.0, "months_to_goal": 14}, target_months=6)
 
 
 def test_verify_cuts_overwrites_the_models_numbers_with_the_tool_caps():
-    cuts = [Cut(category="Dining out", last_30_days=400, proposed_cap=250), Cut(category="Shopping", last_30_days=90, proposed_cap=60)]
+    cuts = [CapProposal(category="Dining out", last_30_days=400, proposed_cap=250), CapProposal(category="Shopping", last_30_days=90, proposed_cap=60)]
     got = verify_cuts(cuts, [{"calls": [CAPS]}])
     assert [(c.category, c.last_30_days, c.proposed_cap) for c in got] == [("Dining out", 412.4, 310.0), ("Shopping", 100.0, 75.0)]
 
 
 def test_verify_cuts_blanks_a_cap_no_tool_computed():
-    got = verify_cuts([Cut(category="Groceries", last_30_days=500, proposed_cap=350)], [{"calls": [CAPS]}])
+    got = verify_cuts([CapProposal(category="Groceries", last_30_days=500, proposed_cap=350)], [{"calls": [CAPS]}])
     assert got[0].proposed_cap is None
 
 
 def test_verify_cuts_without_any_tool_call_blanks_every_cap():
-    assert verify_cuts([Cut(category="Dining out", last_30_days=1, proposed_cap=1)], [{"calls": []}])[0].proposed_cap is None
+    assert verify_cuts([CapProposal(category="Dining out", last_30_days=1, proposed_cap=1)], [{"calls": []}])[0].proposed_cap is None
 
 
 def test_verify_cuts_uses_the_latest_matching_call():
     newer = done("propose_caps", [{"category": "Shopping", "last_30_days": 200.0, "proposed_cap": 150.0}], days=30)
-    got = verify_cuts([Cut(category="Shopping", last_30_days=1, proposed_cap=1)], [{"calls": [CAPS]}, {"calls": [newer]}])
+    got = verify_cuts([CapProposal(category="Shopping", last_30_days=1, proposed_cap=1)], [{"calls": [CAPS]}, {"calls": [newer]}])
     assert got[0].proposed_cap == 150.0
 
 
@@ -77,8 +77,8 @@ def test_verify_insight_amount_set_cap_takes_the_tool_cap_for_its_category():
     assert got.amount == 310.0
 
 
-def test_verify_insight_amount_auto_save_takes_the_savings_plan_amount():
-    assert verify_insight_amount(insight("auto_save", amount=999), [{"calls": [PLAN]}]).amount == 650.0
+def test_verify_insight_amount_auto_save_takes_the_savings_goal_amount():
+    assert verify_insight_amount(insight("auto_save", amount=999), [{"calls": [GOAL]}]).amount == 650.0
 
 
 @pytest.mark.parametrize("ins", [insight("set_cap", category="Groceries", amount=5), insight("auto_save", amount=5),
@@ -149,9 +149,9 @@ def test_run_specialist_without_tool_calls_just_answers(con, monkeypatch):
 
 def test_budget_coach_and_savings_strategist_can_call_the_cap_and_plan_tools():
     assert "propose_caps" in [t.name for t in agents.SPECIALISTS["Budget Coach"][1]]
-    assert "savings_plan_tool" in [t.name for t in agents.SPECIALISTS["Savings Strategist"][1]]
+    assert "savings_goal" in [t.name for t in agents.SPECIALISTS["Savings Strategist"][1]]
     assert "propose_caps" in agents.SPECIALISTS["Budget Coach"][0]
-    assert "savings_plan_tool" in agents.SPECIALISTS["Savings Strategist"][0]
+    assert "savings_goal" in agents.SPECIALISTS["Savings Strategist"][0]
 
 
 def fake_structured(**outputs):
@@ -161,8 +161,8 @@ def fake_structured(**outputs):
 
 def test_the_graph_emits_only_cuts_whose_caps_a_tool_computed(con, monkeypatch):
     route = agents.Route(intent="cut spending", agents=["Budget Coach"])
-    invented = agents.Answer(markdown="Cut dining.", cuts=[
-        Cut(category="Dining out", last_30_days=1, proposed_cap=1), Cut(category="Groceries", last_30_days=2, proposed_cap=2)])
+    invented = agents.Answer(markdown="CapProposal dining.", cuts=[
+        CapProposal(category="Dining out", last_30_days=1, proposed_cap=1), CapProposal(category="Groceries", last_30_days=2, proposed_cap=2)])
     monkeypatch.setattr(agents, "structured", fake_structured(Route=route, Answer=invented))
     monkeypatch.setattr(llm, "sonnet", ScriptedModel(ask_for("propose_caps", days=30), AIMessage("Dining is high.")))
     events = list(agents.graph.stream({"question": "where can I cut?"}, stream_mode="custom", version="v2"))
@@ -173,7 +173,7 @@ def test_the_graph_emits_only_cuts_whose_caps_a_tool_computed(con, monkeypatch):
 
 
 def test_generate_insights_stores_the_tool_amount_not_the_models(con, monkeypatch):
-    results = {"Debt Analyzer": [], "Budget Coach": [CAPS], "Savings Strategist": [PLAN]}
+    results = {"Debt Analyzer": [], "Budget Coach": [CAPS], "Savings Strategist": [GOAL]}
     monkeypatch.setattr(agents, "run_specialist", lambda name, task, emit=None: {
         "agent": name, "findings": "f", "calls": results[name], "sources": [], "seconds": 0})
     made = {"Debt Analyzer": insight("add_to_plan", amount=7), "Budget Coach": insight("set_cap", category="Dining out", amount=7),
@@ -216,3 +216,23 @@ def test_the_conversation_reaches_the_routing_the_specialists_and_the_answer(con
     assert "EARLIER: avalanche was cheaper" in seen["Route"]
     assert "EARLIER: avalanche was cheaper" in seen["task"]
     assert "EARLIER: avalanche was cheaper" in seen["Answer"]
+
+
+def test_prompts_are_built_from_config_values(monkeypatch):
+    import importlib.util
+
+    from finagent import config
+
+    monkeypatch.setattr(config, "SAVINGS_TARGET", 0.4)
+    monkeypatch.setattr(config, "EMERGENCY_FUND_MONTHS", 9)
+    monkeypatch.setattr(config, "DEFAULT_EXTRA_MONTHLY", 700)
+    spec = importlib.util.spec_from_file_location("finagent._agents_probe", agents.__file__)
+    probe = importlib.util.module_from_spec(spec)  # a fresh copy, so the real module and its classes stay untouched
+    spec.loader.exec_module(probe)
+    assert "40%" in probe.SPECIALISTS["Savings Strategist"][0] and "25%" not in probe.SPECIALISTS["Savings Strategist"][0]
+    assert "9 months" in probe.INSIGHT_TASKS["Savings Strategist"] and "6 months" not in probe.INSIGHT_TASKS["Savings Strategist"]
+    assert "use 700 if none" in probe.SPECIALISTS["Payoff Optimizer"][0]
+
+
+def test_prompts_name_the_savings_goal_not_a_plan():
+    assert "savings_plan" not in agents.SPECIALISTS["Savings Strategist"][0]

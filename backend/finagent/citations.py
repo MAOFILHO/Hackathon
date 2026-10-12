@@ -3,18 +3,19 @@
 from . import db
 
 
+_VIEW_TABLES = {"v_transactions": "transactions", "v_debts": "debt_accounts", "v_payslips": "payslips"}  # fixed; never user input
+_SOURCES_SQL = ("SELECT d.name, count(*) n, min(x.row_no) lo, max(x.row_no) hi FROM {table} x "
+                "JOIN documents d ON d.id = x.document_id WHERE d.status = 'ready' GROUP BY 1")
+
+
 def sources_for(con, views: list[str]) -> list[dict]:
     """Which Documents feed the given views, with Row counts. Used for citations."""
     out = []
-    table = {"v_transactions": "transactions", "v_debts": "debt_accounts", "v_payslips": "payslips"}
     for v in views:
-        t = table.get(v)
-        if not t:
+        table = _VIEW_TABLES.get(v)
+        if not table:
             continue
-        sql = {"transactions": "SELECT d.name, count(*) n, min(x.row_no) lo, max(x.row_no) hi FROM transactions x JOIN documents d ON d.id = x.document_id WHERE d.status = 'ready' GROUP BY 1",
-               "debt_accounts": "SELECT d.name, count(*) n, min(x.row_no) lo, max(x.row_no) hi FROM debt_accounts x JOIN documents d ON d.id = x.document_id WHERE d.status = 'ready' GROUP BY 1",
-               "payslips": "SELECT d.name, count(*) n, min(x.row_no) lo, max(x.row_no) hi FROM payslips x JOIN documents d ON d.id = x.document_id WHERE d.status = 'ready' GROUP BY 1"}[t]
-        for r in db.rows(con, sql):
+        for r in db.rows(con, _SOURCES_SQL.format(table=table)):
             out.append({"document": r["name"], "rows": f"rows {r['lo']}–{r['hi']}" if r["n"] > 1 else f"row {r['lo']}", "count": r["n"]})
     return out
 

@@ -55,7 +55,7 @@ def set_setting(con, key: str, value: str) -> None:
 
 def payoff_view(con, as_of: date) -> dict:
     strategy = setting(con, "payoff_strategy", "avalanche")
-    extra = float(setting(con, "extra_monthly", "500"))
+    extra = float(setting(con, "extra_monthly", str(config.DEFAULT_EXTRA_MONTHLY)))
     order = [n for n in setting(con, "payoff_order", "").split("|") if n] or None
     return payoff_result(con, extra, strategy, order, as_of)
 
@@ -165,19 +165,16 @@ def payoff_comparison(con, extra: float, as_of: date | None = None) -> dict:
 
 # --- Agent numbers computed by code (agents call these through tools; they never do the arithmetic) ---
 
-DISCRETIONARY = ("Dining out", "Shopping", "Ride-hailing", "Subscriptions", "Entertainment")
-
-
-def propose_caps(spend_by_category: dict[str, float], discretionary: tuple[str, ...] = DISCRETIONARY,
-                 share: float = 0.75) -> list[dict]:
-    """Proposed Budget Caps: a discretionary category gets 75% of its last-30-day Spending, rounded to the
+def propose_caps(spent: dict[str, float], discretionary: tuple[str, ...] = config.DISCRETIONARY_CATEGORIES,
+                 share: float = config.CAP_SHARE) -> list[dict]:
+    """Proposed Budget Caps: a discretionary category gets CAP_SHARE of its last-30-day Spending, rounded to the
     nearest $5 (halves round up). Other categories (rent, groceries, ...) get none. Largest Spending first."""
     out = [{"category": c, "last_30_days": v, "proposed_cap": math.floor(v * share / 5 + 0.5) * 5.0}
-           for c, v in spend_by_category.items() if c in discretionary and v > 0]
+           for c, v in spent.items() if c in discretionary and v > 0]
     return sorted(out, key=lambda r: -r["last_30_days"])
 
 
-def savings_plan(monthly_surplus: float, saved: float, monthly_need: float, target_months: float,
+def savings_goal(monthly_surplus: float, saved: float, monthly_need: float, target_months: float,
                  as_of: date | None = None) -> dict:
     """Save the whole monthly surplus until `saved` covers target_months of monthly_need. months_to_goal is
     rounded up; goal_date is the first of the month that many months after as_of's month. No surplus: no date."""

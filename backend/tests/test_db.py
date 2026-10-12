@@ -105,3 +105,19 @@ def test_new_ids_start_above_every_existing_id_after_a_reopen(tmp_path):
     second = db.connect(path)
     assert db.next_id(second) > 7000
     assert len({db.next_id(second) for _ in range(5)}) == 5
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT nextval('ids')",
+    "SELECT NEXTVAL('ids')",
+    "SELECT main.nextval('ids')",
+    "SELECT currval('ids')",
+    "SELECT setseed(0.5)",
+    "SELECT category FROM v_transactions WHERE nextval('ids') > 0",
+    "SELECT * FROM range(3) WHERE EXISTS (SELECT nextval('ids'))",
+])
+def test_agent_sql_rejects_side_effecting_functions(con, sql):
+    before = con.execute("SELECT nextval('ids')").fetchone()[0]
+    with pytest.raises(db.AgentSQLError):
+        db.agent_sql(con, sql)
+    assert con.execute("SELECT nextval('ids')").fetchone()[0] == before + 1  # the id counter did not move

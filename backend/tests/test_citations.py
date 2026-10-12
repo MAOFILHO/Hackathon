@@ -126,3 +126,12 @@ def test_synthesize_numbers_one_source_per_document_and_tells_the_model(monkeypa
     assert [(s["document"], s["rows"]) for s in sources] == [("Card.pdf", "rows 2–3, 9"), ("Bank.csv", "row 1")]
     assert "[1] Card.pdf: rows 2–3, 9 (p. 1)" in seen[0] and "[2] Bank.csv: row 1" in seen[0]
     assert "[n]" in agents.ANSWER_PROMPT.messages[0].prompt.template
+
+
+def test_sources_for_cites_the_documents_behind_each_view(tmp_path):
+    con = db.connect(tmp_path / "t.duckdb")
+    seed.load(con)
+    for view in ("v_transactions", "v_debts", "v_payslips"):
+        got = citations.sources_for(con, [view])
+        assert got and all(s["document"] and s["count"] > 0 for s in got), view
+    assert citations.sources_for(con, ["v_budget_caps", "nonsense"]) == []

@@ -94,7 +94,7 @@ cd backend && uv run pytest -q
 ## Layout
 
 - `backend/finagent/money.py`, `payoff.py`: money rules and payoff simulation (plain code, tested; agents never do arithmetic)
-- `backend/finagent/schemas.py`: one Pydantic shape per Row type; every model call ends in a `PydanticOutputParser`
+- `backend/finagent/schemas.py`: one Pydantic shape per Row type; the Pydantic schema is enforced on every model output through structured output
 - `backend/finagent/ingest.py`: CSV/XLSX parsing, Claude PDF extraction, Haiku categorization
 - `backend/finagent/agents.py`, `tools.py`: LangGraph orchestration and the agents' tools (read-only SQL over DuckDB views)
 - `frontend/src/pages/`: Dashboard, Advisor, Documents

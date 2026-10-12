@@ -44,14 +44,21 @@ def _day(m: date, day: int) -> date | None:
     return d if START <= d <= END else None
 
 
-def bank_rows(rng: random.Random) -> list[tuple[date, str, float, str]]:
-    """(date, narration, signed amount, category)."""
-    rows = []
-
+def _adder(rows: list):
+    """An `add(month, day, description, amount, category)` that appends a Row when the day exists in that month and window."""
     def add(m, day, desc, amt, cat):
         d = _day(m, day)
         if d:
             rows.append((d, desc, round(amt, 2), cat))
+
+    return add
+
+
+def bank_rows(rng: random.Random) -> list[tuple[date, str, float, str]]:
+    """(date, narration, signed amount, category)."""
+    rows = []
+
+    add = _adder(rows)
 
     for m in _months():
         add(m, 28, "Salary credit - Acme Logistics", 6850, "Income")
@@ -83,10 +90,7 @@ def bank_rows(rng: random.Random) -> list[tuple[date, str, float, str]]:
 def card_rows(rng: random.Random) -> list[tuple[date, str, float, str]]:
     rows = []
 
-    def add(m, day, desc, amt, cat):
-        d = _day(m, day)
-        if d:
-            rows.append((d, desc, round(amt, 2), cat))
+    add = _adder(rows)
 
     for m in _months():
         for day in (5, 9, 12, 16, 19, 23, 26, 29):

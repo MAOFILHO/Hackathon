@@ -107,7 +107,7 @@ export default function Advisor({ initial, onConsumed, onAnswered }: { initial: 
         <div className="recent">
           <h4>RECENT</h4>
           {turns.length === 0 && <div className="muted" style={{ fontSize: 13, padding: '0 10px' }}>Nothing yet</div>}
-          {[...turns].reverse().map((t, i) => <div key={i} className={`recent-item ${t === last ? 'on' : ''}`}>{t.question}</div>)}
+          {[...turns].reverse().map((t, i) => <button key={i} className={`recent-item ${t === last ? 'on' : ''}`} onClick={() => ask(t.question)} disabled={busy}>{t.question}</button>)}
         </div>
         <div className="quick">
           <h4>QUICK PROMPTS</h4>

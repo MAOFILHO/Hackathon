@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 
-from finagent import db, finance, seed, tools
+from finagent import config, db, finance, seed, tools
 
 AS_OF = date(2026, 10, 10)
 
@@ -34,24 +34,24 @@ def test_propose_caps_skips_zero_spend_and_rounds_half_up():
     assert got == [{"category": "Subscriptions", "last_30_days": 10.0, "proposed_cap": 10.0}]  # 7.5 -> 10
 
 
-def test_savings_plan_saves_the_surplus_until_the_gap_is_closed():
-    p = finance.savings_plan(monthly_surplus=500, saved=3000, monthly_need=2000, target_months=6, as_of=AS_OF)
+def test_savings_goal_saves_the_surplus_until_the_gap_is_closed():
+    p = finance.savings_goal(monthly_surplus=500, saved=3000, monthly_need=2000, target_months=6, as_of=AS_OF)
     assert p["gap"] == 9000 and p["monthly_amount"] == 500 and p["months_to_goal"] == 18
     assert p["goal_date"] == date(2028, 4, 1)
 
 
-def test_savings_plan_rounds_months_up():
-    p = finance.savings_plan(400, 0, 1000, 1, as_of=AS_OF)
+def test_savings_goal_rounds_months_up():
+    p = finance.savings_goal(400, 0, 1000, 1, as_of=AS_OF)
     assert p["months_to_goal"] == 3
 
 
-def test_savings_plan_without_surplus_has_no_date():
-    p = finance.savings_plan(-50, 3000, 2000, 6, as_of=AS_OF)
+def test_savings_goal_without_surplus_has_no_date():
+    p = finance.savings_goal(-50, 3000, 2000, 6, as_of=AS_OF)
     assert p["monthly_amount"] == 0 and p["months_to_goal"] is None and p["goal_date"] is None
 
 
-def test_savings_plan_goal_already_met():
-    p = finance.savings_plan(500, 12000, 2000, 6, as_of=AS_OF)
+def test_savings_goal_goal_already_met():
+    p = finance.savings_goal(500, 12000, 2000, 6, as_of=AS_OF)
     assert p["gap"] == 0 and p["monthly_amount"] == 0 and p["months_to_goal"] == 0 and p["goal_date"] == AS_OF
 
 
@@ -120,13 +120,43 @@ def test_propose_caps_tool_uses_last_30_days_of_spending(con):
     spent = finance.spend_by_category(con, 30, AS_OF)
     out = run(tools.propose_caps)["result"]
     assert out and all(c["last_30_days"] == spent[c["category"]] for c in out)
-    assert {c["category"] for c in out} <= set(finance.DISCRETIONARY)
+    assert {c["category"] for c in out} <= set(config.DISCRETIONARY_CATEGORIES)
 
 
-def test_savings_plan_tool_uses_surplus_of_the_last_full_month(con):
+def test_savings_goal_uses_surplus_of_the_last_full_month(con):
     s, e = finance.last_full_month(AS_OF)
     m = finance.summarize(finance.load_txns(con), s, e)
     surplus = m.income - m.spending - m.debt_service
-    out = run(tools.savings_plan_tool, target_months=6)["result"]
+    out = run(tools.savings_goal, target_months=6)["result"]
     assert out["monthly_amount"] == round(max(surplus, 0), 2)
     assert out["gap"] == finance.emergency_fund(con, 6, AS_OF)["gap"]
+
+
+# --- one source of truth for the views and the money constants ----------------------------------------
+
+def test_run_sql_description_lists_every_agent_view_with_its_columns():
+    for view, columns in db.AGENT_VIEWS.items():
+        assert f"{view}({columns})" in tools.run_sql.description
+
+
+def test_run_sql_asks_for_citations_of_every_agent_view(con, monkeypatch):
+    seen = []
+    monkeypatch.setattr(tools.citations, "sources_for", lambda _con, views: seen.append(views) or [])
+    out = run(tools.run_sql, query="SELECT category, monthly_cap FROM v_budget_caps")
+    assert "error" not in out and seen == [["v_budget_caps"]]
+
+
+def test_propose_caps_names_its_spending_parameter_spent():
+    assert finance.propose_caps(spent={"Dining out": 100.0}) == [
+        {"category": "Dining out", "last_30_days": 100.0, "proposed_cap": 75.0}]
+
+
+def test_cap_rules_come_from_config():
+    assert config.CAP_SHARE == 0.75
+    assert "Dining out" in config.DISCRETIONARY_CATEGORIES and "Groceries" not in config.DISCRETIONARY_CATEGORIES
+    assert not hasattr(finance, "DISCRETIONARY")
+
+
+def test_the_default_extra_payment_comes_from_config(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DEFAULT_EXTRA_MONTHLY", 700)
+    assert finance.payoff_view(db.connect(tmp_path / "empty.duckdb"), AS_OF)["extra_monthly"] == 700

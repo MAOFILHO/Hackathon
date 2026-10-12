@@ -57,16 +57,18 @@ class AgentSQLError(ValueError):
 
 
 ALLOWED_TABLE_FUNCTIONS = {"range", "generate_series"}
+SIDE_EFFECT_FUNCTIONS = {"nextval", "currval", "setseed"}  # a SELECT that moves the id counter or the random seed
 
 
-def _referenced_tables(con, sql: str) -> tuple[set[str], set[str], set[str]]:
-    """(base tables, CTE names, table functions) a SELECT touches, from DuckDB's own parse tree."""
+def _referenced_tables(con, sql: str) -> tuple[set[str], set[str], set[str], set[str]]:
+    """(base tables, CTE names, table functions, scalar function calls) a SELECT touches, from DuckDB's own parse tree."""
     ast = json.loads(con.execute("SELECT json_serialize_sql(?)", [sql]).fetchone()[0])
     if ast.get("error"):
         raise AgentSQLError(f"Could not parse SQL: {ast.get('error_message')}")
     tables: set[str] = set()
     ctes: set[str] = set()
     functions: set[str] = set()
+    calls: set[str] = set()
 
     def walk(node) -> None:
         if isinstance(node, dict):
@@ -74,6 +76,8 @@ def _referenced_tables(con, sql: str) -> tuple[set[str], set[str], set[str]]:
                 tables.add(node["table_name"].lower())
             if node.get("type") == "TABLE_FUNCTION":
                 functions.add(str(node.get("function", {}).get("function_name", "")).lower())
+            if node.get("type") == "FUNCTION":
+                calls.add(str(node.get("function_name", "")).lower())
             for entry in node.get("cte_map", {}).get("map", []):
                 ctes.add(entry["key"].lower())
             for value in node.values():
@@ -83,7 +87,7 @@ def _referenced_tables(con, sql: str) -> tuple[set[str], set[str], set[str]]:
                 walk(value)
 
     walk(ast)
-    return tables, ctes, functions
+    return tables, ctes, functions, calls
 
 
 def connect(path: Path | str) -> duckdb.DuckDBPyConnection:
@@ -141,10 +145,12 @@ def agent_sql(con, sql: str) -> list[dict]:
         raise AgentSQLError(f"Could not parse SQL: {e}") from e
     if len(stmts) != 1 or stmts[0].type != duckdb.StatementType.SELECT:
         raise AgentSQLError("Only a single SELECT statement is allowed.")
-    tables, ctes, functions = _referenced_tables(con, sql)
+    tables, ctes, functions, calls = _referenced_tables(con, sql)
     hidden = (tables - ctes) - set(AGENT_VIEWS)
     if hidden or not functions <= ALLOWED_TABLE_FUNCTIONS:
         raise AgentSQLError("Query only these views: " + ", ".join(AGENT_VIEWS))
+    if calls & SIDE_EFFECT_FUNCTIONS:
+        raise AgentSQLError("That function changes database state and is not allowed.")
     try:
         cur = con.execute(sql)
     except duckdb.Error as e:
