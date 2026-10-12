@@ -3,6 +3,8 @@
 A personal financial coach. 4 specialist agents (Debt Analyzer, Payoff Optimizer, Budget Coach, Savings Strategist)
 read the user's own Documents and answer with numbers cited back to their Rows. Vocabulary: see `CONTEXT.md`.
 
+Live Web App: https://ai-financial-agent.salmonsky-1761290e.eastus.azurecontainerapps.io/
+
 ## Tech stack
 
 | Layer | Technology | Used for |
