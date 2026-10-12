@@ -5,11 +5,10 @@
 **/.venv
 **/__pycache__
 **/.pytest_cache
+**/.env*
 frontend/dist
-backend/.env
 backend/data/finagent.duckdb*
 backend/data/uploads
 backend/tests
 docs
 deploy
-* copy.py

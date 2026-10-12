@@ -152,3 +152,76 @@ def test_an_empty_secret_stops_the_deploy_before_azure_is_called():
         write_params
     """)
     assert r.returncode != 0 and "empty" in r.stderr.lower()
+
+
+# --- review fixes -------------------------------------------------------------------------------
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+def test_no_stray_copy_files_are_tracked():
+    tracked = subprocess.run(["git", "ls-files"], capture_output=True, text=True, cwd=REPO).stdout.splitlines()
+    assert [f for f in tracked if " copy" in f] == []
+
+
+def test_dockerignore_keeps_every_env_file_out_of_the_public_image():
+    lines = (REPO / ".dockerignore").read_text().splitlines()
+    assert "**/.env*" in lines
+    assert "* copy.py" not in lines     # the stray file is deleted, not hidden
+
+
+def test_readme_never_puts_the_api_key_on_a_command_line():
+    assert not re.search(r"-e ANTHROPIC_API_KEY=", (REPO / "README.md").read_text())
+
+
+def test_readme_no_longer_carries_the_dropped_hugging_face_route():
+    text = (REPO / "README.md").read_text()
+    assert "Hugging Face" not in text and not text.startswith("---")
+
+
+def test_destroy_needs_only_the_azure_cli_but_deploy_also_needs_docker():
+    azure_only = run_in_script_shell("PATH=/nonexistent; az() { :; }; preflight az")
+    assert azure_only.returncode == 0, azure_only.stderr
+    with_docker = run_in_script_shell("PATH=/nonexistent; az() { :; }; preflight az docker")
+    assert with_docker.returncode != 0 and "docker" in with_docker.stderr.lower()
+
+
+def test_a_missing_docker_hub_login_is_caught_before_the_slow_build(tmp_path):
+    config = tmp_path / ".docker"
+    config.mkdir()
+    (config / "config.json").write_text('{"auths": {}}')
+    r = run_in_script_shell(f'DOCKER_CONFIG="{config}"; docker_hub_login_ok')
+    assert r.returncode != 0 and "docker login" in r.stderr
+    (config / "config.json").write_text('{"auths": {"https://index.docker.io/v1/": {}}, "credsStore": "desktop"}')
+    assert run_in_script_shell(f'DOCKER_CONFIG="{config}"; docker_hub_login_ok').returncode == 0
+
+
+def make_repo(path: Path, dirty: bool) -> str:
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=True).stdout.strip()
+
+    path.mkdir()
+    git("init", "-q")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    (path / "a.txt").write_text("one")
+    git("add", ".")
+    git("commit", "-q", "-m", "one")
+    if dirty:
+        (path / "a.txt").write_text("two")
+    return git("rev-parse", "--short", "HEAD")
+
+
+def test_the_image_tag_is_the_commit_when_clean_and_unique_when_there_are_uncommitted_changes(tmp_path):
+    clean_hash = make_repo(tmp_path / "clean", dirty=False)
+    r = run_in_script_shell(f'ROOT="{tmp_path / "clean"}"; DOCKERHUB_USER=me; need_image; echo "$IMAGE"')
+    assert r.stdout.strip() == f"me/ai-financial-agent:{clean_hash}"
+    dirty_hash = make_repo(tmp_path / "dirty", dirty=True)
+    r = run_in_script_shell(f'ROOT="{tmp_path / "dirty"}"; DOCKERHUB_USER=me; need_image 2>/dev/null; echo "$IMAGE"')
+    assert re.fullmatch(rf"me/ai-financial-agent:{dirty_hash}-dirty\d+", r.stdout.strip())   # a rerun is never a silent no-op
+
+
+def test_dry_run_does_not_ask_for_secrets():
+    r = run_script("deploy", DOCKERHUB_USER="testuser")     # no password, no key, no terminal
+    assert r.returncode == 0, r.stderr
+    assert "az deployment group create" in r.stdout

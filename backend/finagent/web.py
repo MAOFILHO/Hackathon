@@ -30,14 +30,18 @@ class PasswordGate:
         return False
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or self._allowed(scope):
+        kind = scope["type"]
+        if kind == "lifespan" or (kind in ("http", "websocket") and self._allowed(scope)):
             await self.app(scope, receive, send)
-            return
-        body = b"Password required"
-        await send({"type": "http.response.start", "status": 401, "headers": [
-            (b"www-authenticate", b'Basic realm="FinAgent"'), (b"content-type", b"text/plain"),
-            (b"content-length", str(len(body)).encode())]})
-        await send({"type": "http.response.body", "body": body})
+        elif kind == "websocket":
+            await receive()  # the client's connect message, then refuse it
+            await send({"type": "websocket.close", "code": 1008})
+        else:
+            body = b"Password required"
+            await send({"type": "http.response.start", "status": 401, "headers": [
+                (b"www-authenticate", b'Basic realm="AI Financial Agent"'), (b"content-type", b"text/plain"),
+                (b"content-length", str(len(body)).encode())]})
+            await send({"type": "http.response.body", "body": body})
 
 
 def install(app, *, static_dir: Path | str | None = None, password: str | None = None,

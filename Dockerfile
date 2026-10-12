@@ -1,4 +1,4 @@
-# Hugging Face Docker Space: one container serves the API and the built frontend on port 7860.
+# One container serves the API and the built frontend on port 7860 (deployed with deploy/azure/deploy.sh).
 
 FROM node:22-slim AS web
 WORKDIR /web

@@ -10,12 +10,13 @@
 #   LOCATION        Azure region (default eastus)       RESOURCE_GROUP (default rg-ai-financial-agent)
 #   APP_PASSWORD    shared team password, 12+ characters (asked for, hidden, if not set)
 #   ANTHROPIC_API_KEY, ANTHROPIC_WORKSPACE_ID (optional)
+#   IMAGE_TAG, APP_NAME   override the image tag (default: the commit) and the app name
 #   DRY_RUN=1       print what would run, change nothing
 #   YES=1           skip the "deploy to this subscription?" question
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
+ROOT="${ROOT:-$(cd "$HERE/../.." && pwd)}"
 LOCATION="${LOCATION:-eastus}"
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-ai-financial-agent}"
 APP_NAME="${APP_NAME:-ai-financial-agent}"
@@ -27,13 +28,29 @@ die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 run() { if [ "$DRY_RUN" = "1" ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
 usage() { printf 'Usage: %s deploy | update | destroy\n' "$0" >&2; exit 2; }
 
-preflight() {
+preflight() {  # preflight TOOL...: each tool must exist (Docker must also be running); Azure login is always needed
   [ "$DRY_RUN" = "1" ] && return 0
-  command -v az >/dev/null || die "Azure CLI not found (brew install azure-cli)"
-  command -v docker >/dev/null || die "Docker not found"
-  docker info >/dev/null 2>&1 || die "Docker is not running: start Docker Desktop"
-  command -v python3 >/dev/null || die "python3 not found"
+  local tool
+  for tool in "$@"; do
+    command -v "$tool" >/dev/null || die "$tool not found (install it and try again)"
+    if [ "$tool" = "docker" ]; then
+      docker info >/dev/null 2>&1 || die "Docker is not running: start Docker Desktop"
+    fi
+  done
   az account show >/dev/null 2>&1 || die "Not signed in to Azure: run 'az login'"
+}
+
+docker_hub_login_ok() {  # fail now, not after a ten minute build
+  [ "$DRY_RUN" = "1" ] && return 0
+  python3 - "${DOCKER_CONFIG:-$HOME/.docker}/config.json" <<'PY' || die "Not signed in to Docker Hub: run 'docker login' and try again"
+import json, sys
+
+try:
+    auths = json.load(open(sys.argv[1])).get("auths", {})
+except (OSError, ValueError):
+    sys.exit(1)
+sys.exit(0 if any("docker.io" in registry for registry in auths) else 1)
+PY
 }
 
 confirm_subscription() {
@@ -50,15 +67,18 @@ need_image() {
   : "${DOCKERHUB_USER:?Set DOCKERHUB_USER to your Docker Hub user name, for example: DOCKERHUB_USER=me ./deploy.sh deploy}"
   local tag
   tag="${IMAGE_TAG:-$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
-  if [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]; then
-    printf 'Note: uncommitted changes are included in the image tagged %s\n' "$tag" >&2
+  if [ -z "${IMAGE_TAG:-}" ] && [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]; then
+    tag="$tag-dirty$(date +%H%M%S)"   # a new tag every time, so Azure never sees "the same image" and skips it
+    printf 'Note: uncommitted changes are included, so the image is tagged %s\n' "$tag" >&2
   fi
   IMAGE="$DOCKERHUB_USER/ai-financial-agent:$tag"
 }
 
 ask_secret() {  # ask_secret VARIABLE "prompt": keep the value if already set, otherwise ask without echoing
   local var="$1" prompt="$2" value="${!1:-}"
-  if [ -z "$value" ]; then
+  if [ -z "$value" ] && [ "$DRY_RUN" = "1" ]; then
+    value="dry-run-placeholder"   # a dry run changes nothing, so it never asks for a real secret
+  elif [ -z "$value" ]; then
     [ -t 0 ] || die "$var is not set and there is no terminal to ask on"
     read -rs -p "$prompt: " value
     printf '\n' >&2
@@ -67,6 +87,7 @@ ask_secret() {  # ask_secret VARIABLE "prompt": keep the value if already set, o
 }
 
 build_and_push() {
+  docker_hub_login_ok
   say "Building the image for linux/amd64 (Azure Container Apps does not run arm64; this is slower on an Apple Silicon Mac)"
   run docker buildx build --platform linux/amd64 --load -t "$IMAGE" "$ROOT"
   say "Pushing $IMAGE (public on Docker Hub; it holds the app code and sample data, no secrets)"
@@ -126,7 +147,7 @@ check_link() {  # $1 = URL. Expect 401 without the password; with it (when we kn
 }
 
 cmd_deploy() {
-  preflight; need_image; confirm_subscription
+  preflight az docker python3; need_image; confirm_subscription
   ask_secret APP_PASSWORD "Choose the shared team password (12+ characters, hidden)"
   [ "${#APP_PASSWORD}" -ge 12 ] || die "APP_PASSWORD must be at least 12 characters"
   ask_secret ANTHROPIC_API_KEY "Paste your Anthropic API key (hidden)"
@@ -151,7 +172,7 @@ cmd_deploy() {
 }
 
 cmd_update() {
-  preflight; need_image; confirm_subscription
+  preflight az docker; need_image; confirm_subscription
   build_and_push
   say "Swapping in the new image"
   run az containerapp update --resource-group "$RESOURCE_GROUP" --name "$APP_NAME" --image "docker.io/$IMAGE" --output none
@@ -161,7 +182,7 @@ cmd_update() {
 }
 
 cmd_destroy() {
-  preflight
+  preflight az
   say "This deletes resource group $RESOURCE_GROUP and everything in it (the app, its logs, its secrets)."
   if [ "$DRY_RUN" != "1" ]; then
     [ -t 0 ] || die "No terminal to confirm on"

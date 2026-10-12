@@ -115,3 +115,27 @@ def test_the_real_app_refuses_to_start_in_a_deployment_without_a_password():
 
 def test_the_real_app_starts_with_a_password():
     assert _import_real_app(REQUIRE_PASSWORD="1", APP_PASSWORD="pw").returncode == 0
+
+
+def test_websocket_connections_need_the_password_too():
+    import base64
+
+    from fastapi import WebSocket
+    from starlette.websockets import WebSocketDisconnect
+
+    app = FastAPI()
+
+    @app.websocket("/ws")
+    async def ws(socket: WebSocket):
+        await socket.accept()
+        await socket.send_text("hi")
+        await socket.close()
+
+    web.install(app, password="s3cret")
+    with TestClient(app) as c:                 # entering the context also runs the app's lifespan through the gate
+        with pytest.raises(WebSocketDisconnect):
+            with c.websocket_connect("/ws"):
+                pass
+        token = base64.b64encode(b"user:s3cret").decode()
+        with c.websocket_connect("/ws", headers={"Authorization": f"Basic {token}"}) as socket:
+            assert socket.receive_text() == "hi"
