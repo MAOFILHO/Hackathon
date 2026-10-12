@@ -82,8 +82,14 @@ write_params() {  # a private temporary file, so the secrets never appear in a c
   umask 077
   PARAMS_FILE="$(mktemp "${TMPDIR:-/tmp}/ai-financial-agent-params.XXXXXX")"
   trap 'rm -f "$PARAMS_FILE"' EXIT
-  IMAGE="docker.io/$IMAGE" APP_NAME="$APP_NAME" python3 - "$PARAMS_FILE" <<'PY'
+  # Typed answers are plain shell variables, not exported: hand them to the helper explicitly.
+  IMAGE="docker.io/$IMAGE" APP_NAME="$APP_NAME" APP_PASSWORD="${APP_PASSWORD:-}" ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+    ANTHROPIC_WORKSPACE_ID="${ANTHROPIC_WORKSPACE_ID:-}" python3 - "$PARAMS_FILE" <<'PY'
 import json, os, sys
+
+for name in ("APP_PASSWORD", "ANTHROPIC_API_KEY"):
+    if not os.environ.get(name):
+        sys.exit(f"ERROR: {name} is empty: refusing to deploy a secret-less app")
 
 def value(name):
     return {"value": os.environ.get(name, "")}
@@ -165,9 +171,11 @@ cmd_destroy() {
   run az group delete --name "$RESOURCE_GROUP" --yes
 }
 
-case "${1:-}" in
-  deploy)  cmd_deploy ;;
-  update)  cmd_update ;;
-  destroy) cmd_destroy ;;
-  *)       usage ;;
-esac
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then   # run the command only when executed, not when sourced by the tests
+  case "${1:-}" in
+    deploy)  cmd_deploy ;;
+    update)  cmd_update ;;
+    destroy) cmd_destroy ;;
+    *)       usage ;;
+  esac
+fi

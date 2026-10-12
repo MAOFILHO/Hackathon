@@ -113,3 +113,42 @@ def test_destroy_deletes_the_whole_resource_group():
 def test_unknown_commands_print_usage_and_fail():
     r = run_script("explode")
     assert r.returncode != 0 and "Usage" in r.stderr
+
+
+# --- the parameters file (this is the step a dry run skips) -----------------------------------
+
+def run_in_script_shell(body: str):
+    """Source the script and run `body` in the same shell, so assignments stay plain (unexported) like typed answers."""
+    clean = {k: v for k, v in os.environ.items() if k not in ("APP_PASSWORD", "ANTHROPIC_API_KEY", "DRY_RUN")}
+    return subprocess.run(["bash", "-c", f'set -euo pipefail\nsource "{SCRIPT}"\n{body}'], capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL, env=clean)
+
+
+def test_typed_secrets_reach_the_parameters_file_even_though_they_are_not_exported():
+    r = run_in_script_shell(f"""
+        APP_PASSWORD='{PASSWORD}'
+        ANTHROPIC_API_KEY='{KEY}'
+        IMAGE='testuser/ai-financial-agent:abc'
+        write_params
+        echo "PATH:$PARAMS_FILE"
+        ls -l "$PARAMS_FILE" | cut -c1-10
+        cat "$PARAMS_FILE"
+    """)
+    assert r.returncode == 0, r.stderr
+    path = re.search(r"PATH:(\S+)", r.stdout).group(1)
+    assert "-rw-------" in r.stdout                      # readable only by the user
+    import json
+    params = json.loads(r.stdout[r.stdout.index("{"):])["parameters"]
+    assert params["appPassword"]["value"] == PASSWORD and params["anthropicApiKey"]["value"] == KEY
+    assert params["image"]["value"] == "docker.io/testuser/ai-financial-agent:abc"
+    assert not os.path.exists(path)                      # removed when the script ends
+
+
+def test_an_empty_secret_stops_the_deploy_before_azure_is_called():
+    r = run_in_script_shell(f"""
+        APP_PASSWORD=''
+        ANTHROPIC_API_KEY='{KEY}'
+        IMAGE='testuser/ai-financial-agent:abc'
+        write_params
+    """)
+    assert r.returncode != 0 and "empty" in r.stderr.lower()
