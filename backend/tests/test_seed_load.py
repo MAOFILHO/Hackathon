@@ -25,3 +25,12 @@ def test_load_twice_does_not_duplicate(tmp_path):
     once = _counts(con)
     seed.load(con)
     assert _counts(con) == once
+
+
+def test_the_default_extra_payment_in_the_seed_comes_from_config(tmp_path, monkeypatch):
+    from finagent import config
+
+    monkeypatch.setattr(config, "DEFAULT_EXTRA_MONTHLY", 750)
+    con = db.connect(tmp_path / "seedcfg.duckdb")
+    seed.load(con)
+    assert con.execute("SELECT value FROM settings WHERE key = 'extra_monthly'").fetchone()[0] == "750"

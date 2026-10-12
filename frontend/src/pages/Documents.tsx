@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, pct, usd, type Doc, type DocPreview, type Mapping } from '../api'
+import { MAX_PREVIEW, showAllLabel } from '../helpers'
 
-const MAX_PREVIEW = 1000  // the backend's cap on ?limit
 const TYPE_LABEL: Record<string, string> = { spending: 'Spending', debt: 'Debt', income: 'Income', receipt: 'Receipt' }
 
 function docMeta(d: Doc) {
@@ -102,7 +102,7 @@ export default function Documents() {
   }
 
   const doc = docs.find((d) => d.id === selected)
-  const total = preview?.row_count ?? doc?.row_count ?? 0
+  const total = preview?.transaction_count ?? doc?.row_count ?? 0   // the table lists transactions; row_count also counts debts and payslips
   const elapsed = doc ? Math.round((Date.now() - (startedAt.current[doc.id] ?? Date.now())) / 1000) : 0
   const rows = preview ? (showAll ? preview.transactions : preview.transactions.slice(0, 8)) : []
   const isTable = doc && (doc.file_type === 'csv' || doc.file_type === 'xlsx')
@@ -218,7 +218,7 @@ export default function Documents() {
                     <span>Showing {rows.length} of {total} rows · {preview.needs_review} need review</span>
                     <span>
                       {preview.transactions.length > 8 && <button className="btn small" style={{ border: 0, color: 'var(--green)', textDecoration: 'underline', background: 'none' }} onClick={() => setShowAll(!showAll)}>{showAll ? 'Show fewer' : 'Show more rows'}</button>}
-                      {preview.transactions.length < total && <button className="btn small" style={{ border: 0, color: 'var(--green)', textDecoration: 'underline', background: 'none' }} onClick={loadAll} disabled={busy}>{total > MAX_PREVIEW ? `Show first ${MAX_PREVIEW} rows` : `Show all ${total} rows`}</button>}
+                      {showAllLabel(preview.transactions.length, total) && <button className="btn small" style={{ border: 0, color: 'var(--green)', textDecoration: 'underline', background: 'none' }} onClick={loadAll} disabled={busy}>{showAllLabel(preview.transactions.length, total)}</button>}
                     </span>
                   </div>
                 </>

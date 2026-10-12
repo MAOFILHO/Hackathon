@@ -147,7 +147,7 @@ def test_run_specialist_without_tool_calls_just_answers(con, monkeypatch):
     assert r["findings"] == "Nothing to do." and r["calls"] == []
 
 
-def test_budget_coach_and_savings_strategist_can_call_the_cap_and_plan_tools():
+def test_budget_coach_and_savings_strategist_can_call_the_cap_and_savings_goal_tools():
     assert "propose_caps" in [t.name for t in agents.SPECIALISTS["Budget Coach"][1]]
     assert "savings_goal" in [t.name for t in agents.SPECIALISTS["Savings Strategist"][1]]
     assert "propose_caps" in agents.SPECIALISTS["Budget Coach"][0]
@@ -161,7 +161,7 @@ def fake_structured(**outputs):
 
 def test_the_graph_emits_only_cuts_whose_caps_a_tool_computed(con, monkeypatch):
     route = agents.Route(intent="cut spending", agents=["Budget Coach"])
-    invented = agents.Answer(markdown="CapProposal dining.", cuts=[
+    invented = agents.Answer(markdown="Cut dining.", cuts=[
         CapProposal(category="Dining out", last_30_days=1, proposed_cap=1), CapProposal(category="Groceries", last_30_days=2, proposed_cap=2)])
     monkeypatch.setattr(agents, "structured", fake_structured(Route=route, Answer=invented))
     monkeypatch.setattr(llm, "sonnet", ScriptedModel(ask_for("propose_caps", days=30), AIMessage("Dining is high.")))

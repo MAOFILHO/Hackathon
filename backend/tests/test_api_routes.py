@@ -119,3 +119,36 @@ def test_document_preview_limit_and_row_count(tmp_path, monkeypatch):
         assert len(c.get(f"/api/documents/{bank['id']}?limit=1").json()["transactions"]) == 1
         for bad in (0, 1001, "x"):
             assert c.get(f"/api/documents/{bank['id']}?limit={bad}").status_code == 422
+
+
+def test_document_preview_reports_how_many_transactions_it_pages_through(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as c:
+        card = next(d for d in c.get("/api/documents").json() if d["name"].startswith("Card_Activity"))
+        body = c.get(f"/api/documents/{card['id']}").json()
+        txns = db.get().execute("SELECT count(*) FROM transactions WHERE document_id = ?", [card["id"]]).fetchone()[0]
+        assert body["transaction_count"] == txns
+        assert body["row_count"] > body["transaction_count"]    # the card statement also holds its debt account
+
+
+def test_a_failed_read_stores_a_generic_message_and_logs_the_real_one(tmp_path, monkeypatch, caplog):
+    from finagent import ingest, routes_documents
+
+    monkeypatch.setattr(db, "_con", db.connect(tmp_path / "failed.duckdb"))
+    con = db.get()
+    doc = ingest.create_document(con, "x.csv", "csv", "spending")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("/Users/someone/secret/path.csv: provider said sk-test-123")
+
+    monkeypatch.setattr(ingest, "ingest", boom)
+    with caplog.at_level(logging.ERROR):
+        routes_documents._ingest_job(doc, tmp_path / "x.csv")
+    stored = db.rows(con, "SELECT status, error FROM documents WHERE id = ?", [doc])[0]
+    assert stored["status"] == "failed"
+    assert "secret" not in stored["error"] and "sk-test" not in stored["error"]
+    assert "provider said" in caplog.text
+
+
+def test_a_negative_budget_cap_is_refused(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as c:
+        assert c.post("/api/budget-caps", json=[{"category": "Groceries", "monthly_cap": -5}]).status_code == 422

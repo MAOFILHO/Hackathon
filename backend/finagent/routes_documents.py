@@ -1,6 +1,7 @@
 """Document routes: upload, review, re-extract, confirm, fix a Row, delete."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -10,6 +11,9 @@ from pydantic import BaseModel
 
 from . import db, ingest, seed
 from .schemas import CATEGORIES
+
+log = logging.getLogger(__name__)
+READ_FAILED = "This Document could not be read. Check the file and try again."
 
 router = APIRouter(prefix="/api")
 UPLOADS = Path(__file__).resolve().parent.parent / "data" / "uploads"
@@ -47,7 +51,8 @@ def _ingest_job(doc_id: int, path: Path, mapping: ingest.Mapping | None = None, 
         con.execute("COMMIT")
     except Exception as e:
         con.execute("ROLLBACK")
-        message = str(e)[:200]
+        log.exception("Reading Document %s failed", doc_id)
+        message = READ_FAILED
         if had_rows:  # keep the Rows it already had and say why the new read failed
             con.execute("UPDATE documents SET status = ?, error = ? WHERE id = ?", [status, message, doc_id])
         else:
@@ -77,7 +82,8 @@ def document(doc_id: int, limit: Annotated[int, Query(ge=1, le=1000)] = 50):
     con = db.get()
     doc = _doc(con, doc_id)
     out = ingest.preview(con, doc_id, _path(doc), limit)
-    out["row_count"] = doc["row_count"]  # all Rows in the Document, not just the ones previewed
+    out["row_count"] = doc["row_count"]  # all Rows in the Document (transactions, debts, payslips), not just the ones previewed
+    out["transaction_count"] = con.execute("SELECT count(*) FROM transactions WHERE document_id = ?", [doc_id]).fetchone()[0]
     if doc["file_type"] in ("csv", "xlsx") and (p := _path(doc)):
         out["mapping"] = (json.loads(doc["mapping"]) if doc["mapping"]
                           else ingest.guess_mapping(ingest.read_table(p)).model_dump())

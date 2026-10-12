@@ -12,7 +12,7 @@ import pandas as pd
 from fpdf import FPDF
 from PIL import Image, ImageDraw
 
-from . import db, ingest
+from . import config, db, ingest
 from .schemas import DebtAccount, Payslip, Transaction
 
 SAMPLES = Path(__file__).resolve().parent.parent / "data" / "samples"
@@ -198,7 +198,7 @@ def load(con) -> None:
     doc = ingest.create_document(con, "Receipt_scan.jpg", "jpg", "receipt")
     ingest.finish(con, doc, "receipt", "ready")
 
-    con.execute("INSERT INTO settings VALUES ('payoff_strategy', 'avalanche'), ('extra_monthly', '500')")
+    con.execute("INSERT INTO settings VALUES ('payoff_strategy', 'avalanche'), ('extra_monthly', ?)", [str(config.DEFAULT_EXTRA_MONTHLY)])
 
 
 if __name__ == "__main__":

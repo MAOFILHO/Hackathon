@@ -1,6 +1,6 @@
 """One shape for every Row, whatever produced it: CSV, XLSX, Claude reading a PDF, or seed data.
 
-Every model call ends in a PydanticOutputParser over these models, so malformed output fails loudly
+Every model output is validated against these models (structured output), so malformed output fails loudly
 instead of reaching the database.
 """
 

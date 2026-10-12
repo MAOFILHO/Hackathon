@@ -62,6 +62,7 @@ export interface DocPreview {
   categories: string[]
   /** All Rows in the Document; `transactions` holds only the requested preview. */
   row_count?: number
+  transaction_count?: number
 }
 
 export interface PayoffAccount { name: string; apr: number; balance: number; paid_off: string | null }

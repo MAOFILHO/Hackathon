@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { greetingFor } from '../helpers'
 import { AGENT_CLASS, api, monthYear, pct, usd, type Dashboard as Dash, type Insight, type Strategy } from '../api'
 
 const ago = (iso: string) => {
@@ -63,9 +64,6 @@ export default function Dashboard({ onAsk }: { onAsk: (q: string) => void }) {
   if (!d) return <div className="muted">{err ?? 'Loading…'}</div>
 
   const max = Math.max(...d.cashflow.map((c) => Math.max(c.income, c.spending + c.debt_service)), 1)
-  const firstName = d.user?.split(' ')[0]
-  const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   const longest = Math.max(...d.payoff.accounts.map((a) => (a.paid_off ? new Date(a.paid_off).getTime() : 0)), 1)
   const start = new Date(d.as_of).getTime()
 
@@ -74,7 +72,7 @@ export default function Dashboard({ onAsk }: { onAsk: (q: string) => void }) {
       <div className="page-head">
         <div>
           <div className="eyebrow">{new Date(d.as_of + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · sample data</div>
-          <h1 className="title">{greeting}{firstName ? `, ${firstName}` : ''}</h1>
+          <h1 className="title">{greetingFor(new Date().getHours(), d.user)}</h1>
         </div>
         <form className="ask" onSubmit={(e) => { e.preventDefault(); if (q.trim()) onAsk(q.trim()) }}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder='Ask anything — "Can I afford a car loan in March?"' />

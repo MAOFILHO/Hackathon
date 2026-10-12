@@ -78,7 +78,7 @@ export default function Advisor({ initial, onConsumed, onAnswered }: { initial: 
 
   const last = turns[turns.length - 1]
 
-  const applyPlan = async (a: Answer) => {
+  const applyPayoffStrategy = async (a: Answer) => {
     if (!a.payoff) return
     const strategy = a.payoff.strategy ?? 'avalanche'
     await api.setPayoff(strategy, a.payoff.extra_monthly, a.payoff.custom_order)
@@ -153,7 +153,7 @@ export default function Advisor({ initial, onConsumed, onAnswered }: { initial: 
                     <div className="cites">{t.answer.sources.map((s, k) => <span className="cite" key={k} title={`[${k + 1}] ${s.document} · ${s.rows}${s.pages ? ` (${s.pages})` : ''}`}>[{k + 1}] {s.document} · {s.rows}{s.pages ? ` (${s.pages})` : ''}</span>)}</div>
                   )}
                   <div className="row-actions">
-                    {t.answer.payoff && <button className="btn primary" onClick={() => applyPlan(t.answer!)} disabled={!!t.applied}>Apply Payoff Strategy to dashboard</button>}
+                    {t.answer.payoff && <button className="btn primary" onClick={() => applyPayoffStrategy(t.answer!)} disabled={!!t.applied}>Apply Payoff Strategy to dashboard</button>}
                     {t.answer.payoff && <button className="btn" onClick={() => compare(t.answer!)} disabled={busy || !!t.comparison}>
                       Compare with {t.answer.payoff.strategy === 'snowball' ? 'avalanche' : 'snowball'}</button>}
                     <button className="btn" onClick={() => window.print()}>Export PDF</button>

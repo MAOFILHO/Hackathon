@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import agents, db, finance, llm
 from .payoff import Strategy
@@ -76,7 +76,7 @@ def set_payoff(choice: PayoffChoice):
 
 class Cap(BaseModel):
     category: Literal[tuple(CATEGORIES)]  # type: ignore[valid-type]
-    monthly_cap: float
+    monthly_cap: float = Field(ge=0)
 
 
 @router.post("/budget-caps")

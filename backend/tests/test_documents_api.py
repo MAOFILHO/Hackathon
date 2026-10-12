@@ -92,7 +92,7 @@ def test_failure_is_stored_in_error_and_doc_type_is_kept(client, monkeypatch):
     listed = {d["id"]: d for d in client.get("/api/documents").json()}[doc]
     assert listed["status"] == "failed"
     assert listed["doc_type"] == "spending"
-    assert listed["error"] == "cannot read this file"
+    assert listed["error"] == routes_documents.READ_FAILED   # the real reason goes to the log, not to the screen
     assert "mapping" not in listed
 
 
@@ -104,7 +104,7 @@ def test_pdf_upload_is_accepted_without_an_api_key_and_fails_on_the_document(cli
     r = client.post("/api/documents", files={"file": ("s.pdf", b"%PDF-1.4", "application/pdf")})
     assert r.status_code == 200
     listed = {d["id"]: d for d in client.get("/api/documents").json()}[r.json()["id"]]
-    assert listed["status"] == "failed" and listed["error"] == "no key"
+    assert listed["status"] == "failed" and listed["error"] == routes_documents.READ_FAILED
 
 
 @pytest.mark.parametrize("name", ["x.exe", "scan.jpg", "scan.jpeg", "scan.png", "old.xls"])
