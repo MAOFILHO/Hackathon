@@ -3,6 +3,23 @@
 A personal financial coach. 4 specialist agents (Debt Analyzer, Payoff Optimizer, Budget Coach, Savings Strategist)
 read the user's own Documents and answer with numbers cited back to their Rows. Vocabulary: see `CONTEXT.md`.
 
+## Tech stack
+
+| Layer | Technology | Used for |
+|---|---|---|
+| Backend | Python 3.13, FastAPI, Uvicorn | REST API and the streamed (server-sent events) Ask advisor answers |
+| Agents | LangChain (LCEL) with `langchain-anthropic` | Prompt, model and parser chains; the 4 specialists call tools in a loop |
+| Orchestration | LangGraph | Orchestrator picks the Route, runs the specialists, then writes one cited answer |
+| Models | Claude Sonnet 5.5, Claude Haiku 5.5 | Sonnet: agents and PDF reading. Haiku: bulk categorizing of Rows |
+| Structured output | Pydantic | One schema per Row type (transactions, debts, payslips) and per agent answer |
+| Data ("tabular RAG") | DuckDB | Agents write read-only SQL over 4 approved views; answers cite the Rows they used |
+| Documents | pandas, openpyxl, Claude PDF reading | CSV, XLSX and PDF ingest |
+| Money rules | Plain Python (`money.py`, `payoff.py`) | All arithmetic lives in tested code; the models never calculate |
+| Frontend | React 19, TypeScript, Vite | Dashboard, Advisor and Documents pages themed from the mockups in `docs/` |
+| Rendering | `react-markdown`, `remark-gfm` | Answers with tables |
+| Tests | pytest, httpx | 215 backend tests; the frontend has none yet |
+| Deploy | Docker, Azure Container Apps, Bicep | One container behind a shared password; scales to zero |
+
 ## Run
 
 ```bash
