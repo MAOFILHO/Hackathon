@@ -11,4 +11,5 @@ backend/data/finagent.duckdb*
 backend/data/uploads
 backend/tests
 docs
+deploy
 * copy.py

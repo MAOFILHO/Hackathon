@@ -40,9 +40,30 @@ PDF reading need the key. Uploads accept CSV, XLSX and PDF only (the sample rece
    (139 rows, about 50 s; a timer shows progress, so talk through what is happening). Fix a *Review* row's category, then *Confirm & index*.
    If a re-upload leaves the card statement duplicated, run `curl -X POST localhost:8000/api/demo/reset` to restore the 5 sample Documents.
 
+## Deploy to Azure Container Apps (low cost, no portal clicks)
+
+`deploy/azure/` holds a Bicep template and a script. The app runs as one container, scales to zero when nobody
+uses it (about $0 idle), and gets an HTTPS link protected by a shared password.
+
+You need: the Azure CLI signed in (`az login`), Docker Desktop running, and a Docker Hub login (`docker login`).
+
+```bash
+DOCKERHUB_USER=<your-docker-hub-name> ./deploy/azure/deploy.sh deploy
+```
+
+It asks (hidden) for the team password and your Anthropic key, builds the image for `linux/amd64`, pushes it to
+Docker Hub (public: it holds the code and sample data, no secrets), creates everything in the resource group
+`rg-ai-financial-agent`, and checks the link answers 401 without the password and 200 with it.
+
+- Update after a code change: `DOCKERHUB_USER=<name> ./deploy/azure/deploy.sh update` (secrets are kept).
+- Remove everything: `./deploy/azure/deploy.sh destroy`.
+- Preview without changing anything: add `DRY_RUN=1`.
+- The first visit after a quiet spell takes 10 to 30 s. The database lives in the container: it resets on restart and the 5 sample Documents reload.
+- Set a spend limit on your Anthropic workspace. Everyone with the password uses your key.
+
 ## Deploy to a Hugging Face Space (public link with a password)
 
-The `Dockerfile` builds the frontend and serves it from the backend, so the team gets one link.
+The `Dockerfile` builds the frontend and serves it from the backend, so the team gets one link. Docker Spaces need a paid Hugging Face plan.
 
 1. On huggingface.co create a **Space**: SDK **Docker**, visibility **Public**.
 2. Space **Settings → Variables and secrets**, add these **Secrets**:
