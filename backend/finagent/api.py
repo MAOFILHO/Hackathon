@@ -6,7 +6,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette import EventSourceResponse
 
 from . import agents, db, finance, llm, routes_documents, routes_plan, seed, web
@@ -50,6 +50,7 @@ def reset():
 
 class Question(BaseModel):
     question: str
+    history: list[agents.Turn] = Field(default_factory=list, max_length=10)
 
 
 @app.post("/api/chat")
@@ -59,7 +60,7 @@ def chat(q: Question):
 
     def events():
         try:
-            for chunk in agents.graph.stream({"question": q.question}, stream_mode="custom", version="v2"):
+            for chunk in agents.graph.stream({"question": q.question, "history": agents.conversation(q.history)}, stream_mode="custom", version="v2"):
                 yield {"event": "trace", "data": json.dumps(jsonable_encoder(chunk["data"]))}
         except Exception as e:
             yield {"event": "trace", "data": json.dumps({"type": "error", "message": str(e)[:300]})}

@@ -157,11 +157,14 @@ export const api = {
 }
 
 /** POST /api/chat and yield each server-sent trace event as it arrives. */
-export async function* askAdvisor(question: string): AsyncGenerator<TraceEvent> {
+export interface PastTurn { question: string; answer: string }
+
+/** The earlier questions and answers travel with each new question, so a follow-up keeps its subject. */
+export async function* askAdvisor(question: string, history: PastTurn[] = []): AsyncGenerator<TraceEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
   })
   if (!res.ok || !res.body) {
     const body = await res.json().catch(() => ({}))

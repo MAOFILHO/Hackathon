@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from . import config, db
 from .config import SAVINGS_TRANSFER_PATTERN
 from .money import Txn, spending_by_category, summarize
-from .payoff import Debt, add_months, compare, simulate
+from .payoff import Debt, add_months, compare, minimums_only, simulate
 
 
 def today() -> date:
@@ -82,12 +82,17 @@ def is_duplicate_insight(existing: list[dict], agent: str, title: str) -> bool:
                for r in existing)
 
 
+def window_start(as_of: date, days: int) -> date:
+    """First day of the last `days` days, counting as_of itself: 30 days ending Oct 10 start on Sep 11."""
+    return as_of - timedelta(days=days - 1)
+
+
 def dashboard(con, as_of: date | None = None) -> dict:
     as_of = as_of or today()
     txns = load_txns(con)
     m_start, m_end = last_full_month(as_of)
     month = summarize(txns, m_start, m_end)
-    d30 = summarize(txns, as_of - timedelta(days=30), as_of)
+    d30 = summarize(txns, window_start(as_of, 30), as_of)
     prior = [summarize(txns, *month_bounds(add_months(m_start, -i))).spending for i in range(0, 3)]
     avg3 = sum(prior) / 3
     debts = load_debts(con)
@@ -96,7 +101,7 @@ def dashboard(con, as_of: date | None = None) -> dict:
     payslips = con.execute("SELECT count(*) FROM v_payslips").fetchone()[0]
     payslip_net = latest_payslip_net(con)
     matches_bank = None if payslip_net is None else abs(payslip_net - month.income) <= PAYSLIP_TOLERANCE * month.income
-    d30_by_category = spending_by_category(txns, as_of - timedelta(days=30), as_of)
+    d30_by_category = spending_by_category(txns, window_start(as_of, 30), as_of)
     caps = [{"category": r["category"], "monthly_cap": r["monthly_cap"],
              "last_30_days": d30_by_category.get(r["category"], 0), "over": d30_by_category.get(r["category"], 0) > r["monthly_cap"]}
             for r in db.rows(con, "SELECT category, monthly_cap FROM budget_caps ORDER BY category")]
@@ -130,7 +135,7 @@ def dashboard(con, as_of: date | None = None) -> dict:
 
 def spend_by_category(con, days: int, as_of: date | None = None) -> dict[str, float]:
     as_of = as_of or today()
-    return spending_by_category(load_txns(con), as_of - timedelta(days=days), as_of)
+    return spending_by_category(load_txns(con), window_start(as_of, days), as_of)
 
 
 def emergency_fund(con, target_months: float = config.EMERGENCY_FUND_MONTHS, as_of: date | None = None) -> dict:
@@ -192,7 +197,7 @@ def payoff_result(con, extra: float, strategy: str, order: list[str] | None, as_
     debts = load_debts(con)
     start = first_of_next_month(as_of)
     res = simulate(debts, extra, strategy, start, order)
-    base = simulate(debts, 0, "avalanche", start)
+    base = minimums_only(debts, start)
     by_name = {d.name: d for d in debts}
     return {
         "strategy": strategy, "extra_monthly": extra, "feasible": res.feasible,

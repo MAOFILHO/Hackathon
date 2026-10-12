@@ -56,6 +56,23 @@ class Route(BaseModel):
     agents: list[AgentName] = Field(description="Specialists to run, in order. Use only the ones needed.")
 
 
+class Turn(BaseModel):
+    question: str
+    answer: str
+
+
+HISTORY_TURNS = 3
+ANSWER_CHARS = 1200
+
+
+def conversation(history: list[Turn]) -> str:
+    """The last few turns as prompt text, so a follow-up such as 'What about snowball?' keeps its subject. '' when none."""
+    if not history:
+        return ""
+    turns = "\n\n".join(f"User: {t.question}\nAdvisor: {t.answer[:ANSWER_CHARS]}" for t in history[-HISTORY_TURNS:])
+    return f"Earlier in this conversation:\n{turns}\n\nThe question below may refer to it.\n\n"
+
+
 class Cut(BaseModel):
     category: str
     last_30_days: float
@@ -84,8 +101,9 @@ ROUTE_PROMPT = ChatPromptTemplate.from_messages([
                "- Debt Analyzer: what debts exist and what they cost\n"
                "- Payoff Optimizer: payoff order, debt-free date, extra payments, avalanche vs snowball\n"
                "- Budget Coach: spending, categories, budget caps, what to cut\n"
-               "- Savings Strategist: emergency fund, savings rate, savings goals, affordability"),
-    ("human", "{question}"),
+               "- Savings Strategist: emergency fund, savings rate, savings goals, affordability\n"
+               "A short follow-up (such as 'What about snowball?') continues the earlier conversation: route it by that topic."),
+    ("human", "{history}{question}"),
 ])
 
 ANSWER_PROMPT = ChatPromptTemplate.from_messages([
@@ -95,7 +113,7 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
                "Budget Cap per category using the figures from the propose_caps findings; never invent a cap. Cite your figures: put the marker [n] right after "
                "each figure or claim, where n is the number of the matching entry in the numbered Citations list. Use only numbers "
                "that appear in that list; never cite a source that does not back the figure."),
-    ("human", "Question: {question}\n\nSpecialist findings:\n{findings}\n\nNumbered Citations:\n{sources}"),
+    ("human", "{history}Question: {question}\n\nSpecialist findings:\n{findings}\n\nNumbered Citations:\n{sources}"),
 ])
 
 
@@ -141,6 +159,7 @@ def run_specialist(name: str, task: str, emit=lambda e: None) -> dict:
 
 class State(TypedDict, total=False):
     question: str
+    history: str
     pending: list[str]
     results: list[dict]
 
@@ -148,7 +167,8 @@ class State(TypedDict, total=False):
 def orchestrate(state: State) -> State:
     writer = get_stream_writer()
     STATUS["Orchestrator"] = "running"
-    route = (ROUTE_PROMPT | structured(llm.sonnet(effort="low"), route_parser)).invoke({"question": state["question"]})
+    route = (ROUTE_PROMPT | structured(llm.sonnet(effort="low"), route_parser)).invoke(
+        {"history": state.get("history", ""), "question": state["question"]})
     if not route.agents:
         route.agents = ["Budget Coach"]
     writer({"type": "route", "intent": route.intent, "agents": route.agents})
@@ -159,7 +179,7 @@ def specialist(state: State) -> State:
     writer = get_stream_writer()
     name, rest = state["pending"][0], state["pending"][1:]
     previous = "\n\n".join(f"{r['agent']} found:\n{r['findings']}" for r in state["results"])
-    task = state["question"] + (f"\n\nEarlier findings from other agents:\n{previous}" if previous else "")
+    task = state.get("history", "") + state["question"] + (f"\n\nEarlier findings from other agents:\n{previous}" if previous else "")
     return {"pending": rest, "results": state["results"] + [run_specialist(name, task, writer)]}
 
 
@@ -216,7 +236,7 @@ def synthesize(state: State) -> State:
     numbered = "\n".join(f"[{n}] {s['document']}: {s['rows']}" + (f" ({s['pages']})" if s.get("pages") else "")
                          for n, s in enumerate(sources, start=1)) or "(none)"
     answer = (ANSWER_PROMPT | structured(llm.sonnet(effort="medium"), answer_parser)).invoke(
-        {**_ctx(), "question": state["question"], "findings": findings, "sources": numbered})
+        {**_ctx(), "history": state.get("history", ""), "question": state["question"], "findings": findings, "sources": numbered})
     STATUS["Orchestrator"] = "idle"
     payoff = payoff_choice(state["results"])
     cuts = [c for c in verify_cuts(answer.cuts, state["results"]) if c.proposed_cap is not None]  # the UI applies only computed caps

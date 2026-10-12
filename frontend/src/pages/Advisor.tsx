@@ -47,7 +47,8 @@ export default function Advisor({ initial, onConsumed, onAnswered }: { initial: 
     setBusy(true); setInput(''); setCapsSet(false)
     setTurns((ts) => [...ts, { question, steps: [], started: Date.now() }])
     try {
-      for await (const ev of askAdvisor(question)) {
+      const history = turns.filter((t) => t.answer).map((t) => ({ question: t.question, answer: t.answer!.markdown }))
+      for await (const ev of askAdvisor(question, history)) {
         if (ev.type === 'route') update((t) => ({ ...t, intent: ev.intent, steps: ev.agents.map((agent) => ({ agent, tools: [] })) }))
         if (ev.type === 'tool') update((t) => ({ ...t, steps: t.steps.map((s) => (s.agent === ev.agent ? { ...s, tools: [...s.tools, { tool: ev.tool, rows: ev.rows }] } : s)) }))
         if (ev.type === 'agent_done') update((t) => ({ ...t, steps: t.steps.map((s) => (s.agent === ev.agent ? { ...s, seconds: ev.seconds } : s)) }))

@@ -27,7 +27,7 @@ def test_dashboard_uses_last_full_month_for_income_and_savings_rate(con):
 def test_dashboard_spending_30d_and_change_vs_three_month_average(con):
     d = finance.dashboard(con, AS_OF)
     txns = finance.load_txns(con)
-    last30 = summarize(txns, date(2026, 9, 10), AS_OF).spending
+    last30 = summarize(txns, date(2026, 9, 11), AS_OF).spending   # 30 days counting both end days: Sep 11 to Oct 10
     months = [summarize(txns, date(2026, m, 1), date(2026, m, 28)).spending for m in (7, 8, 9)]
     assert d["spending_30d"]["value"] == last30
     assert d["spending_30d"]["vs_3mo_avg"] is not None
@@ -100,6 +100,22 @@ def test_sources_cite_documents_with_their_row_ranges(con):
 def test_first_of_next_month_rolls_over_the_year():
     assert finance.first_of_next_month(date(2026, 10, 10)) == date(2026, 11, 1)
     assert finance.first_of_next_month(date(2026, 12, 31)) == date(2027, 1, 1)
+
+
+def test_interest_saved_on_the_dashboard_uses_the_same_minimums_only_baseline_as_the_comparison(con):
+    one = finance.payoff_result(con, 500, "avalanche", None, AS_OF)["interest_saved"]
+    both = finance.payoff_comparison(con, 500, AS_OF)["interest_saved_vs_minimums"]["avalanche"]
+    assert one == pytest.approx(both, abs=0.01)
+
+
+def test_a_30_day_window_holds_exactly_30_days_counting_both_end_days(con):
+    doc = con.execute("SELECT id FROM documents WHERE status = 'ready' LIMIT 1").fetchone()[0]
+    con.execute("DELETE FROM transactions")
+    for n, (day, amount) in enumerate(((date(2026, 9, 10), -111), (date(2026, 9, 11), -22), (AS_OF, -3)), start=1):
+        con.execute("INSERT INTO transactions (id, document_id, row_no, date, amount, category, flow) "
+                    "VALUES (?, ?, ?, ?, ?, 'Dining out', 'spending')", [n, doc, n, day, amount])
+    assert finance.spend_by_category(con, 30, AS_OF) == {"Dining out": 25}          # Sep 10 is day 31 and stays out
+    assert finance.dashboard(con, AS_OF)["spending_30d"]["value"] == 25
 
 
 def test_dashboard_lists_budget_caps_with_last_30_days_spending(con):

@@ -52,7 +52,8 @@ def _order(debts: list[Debt], strategy: Strategy, order: list[str] | None) -> li
 
 
 def simulate(debts: list[Debt], extra: float, strategy: Strategy, start: date,
-             order: list[str] | None = None) -> PayoffResult:
+             order: list[str] | None = None, rollover: bool = True) -> PayoffResult:
+    """rollover=False pays every debt only its own minimum, so a paid-off debt frees nothing for the others."""
     seq = _order(debts, strategy, order)
     bal = {d.name: d.balance for d in debts}
     by_name = {d.name: d for d in debts}
@@ -72,10 +73,11 @@ def simulate(debts: list[Debt], extra: float, strategy: Strategy, start: date,
             pay = min(by_name[name].min_payment, bal[name], left)
             bal[name] -= pay
             left -= pay
-        for name in seq:
-            pay = min(bal[name], left)
-            bal[name] -= pay
-            left -= pay
+        if rollover:
+            for name in seq:
+                pay = min(bal[name], left)
+                bal[name] -= pay
+                left -= pay
         for name in seq:
             if name not in paid and bal[name] <= 0.005:
                 bal[name] = 0
@@ -86,8 +88,13 @@ def simulate(debts: list[Debt], extra: float, strategy: Strategy, start: date,
     return PayoffResult(strategy, extra, False, None, None, round(interest, 2), paid, seq)
 
 
+def minimums_only(debts: list[Debt], start: date) -> PayoffResult:
+    """The baseline every saving is measured against: each debt gets its own minimum and nothing else."""
+    return simulate(debts, 0, "avalanche", start, rollover=False)
+
+
 def compare(debts: list[Debt], extra: float, start: date) -> Comparison:
-    base = simulate(debts, 0, "avalanche", start)
+    base = minimums_only(debts, start)
     av = simulate(debts, extra, "avalanche", start)
     sn = simulate(debts, extra, "snowball", start)
     saved = {r.strategy: round(base.total_interest - r.total_interest, 2) for r in (av, sn)}

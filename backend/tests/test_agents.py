@@ -190,3 +190,29 @@ def test_answer_prompt_uses_glossary_names_for_comparison_tables():
 
     text = " ".join(str(m.prompt.template) for m in ANSWER_PROMPT.messages)
     assert "Payoff Strategy" in text
+
+
+# --- follow-up questions keep the conversation ---------------------------------------------------------
+
+def test_conversation_is_empty_without_history_and_keeps_only_the_last_turns_cut_short():
+    assert agents.conversation([]) == ""
+    turns = [agents.Turn(question=f"q{i}", answer=f"a{i}" + "x" * 5000) for i in range(5)]
+    text = agents.conversation(turns)
+    assert "q0" not in text and "q1" not in text and "q2" in text and "q4" in text
+    assert len(text) < 3 * (agents.ANSWER_CHARS + 100)
+
+
+def test_the_conversation_reaches_the_routing_the_specialists_and_the_answer(con, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(agents, "structured", lambda _m, parser: RunnableLambda(lambda prompt: (
+        seen.setdefault(parser.pydantic_object.__name__, prompt.to_string()),
+        agents.Route(intent="x", agents=["Payoff Optimizer"]) if parser.pydantic_object is agents.Route
+        else agents.Answer(markdown="ok"))[1]))
+    monkeypatch.setattr(agents, "run_specialist", lambda name, task, emit=None: (
+        seen.setdefault("task", task), {"agent": name, "findings": "f", "calls": [], "sources": [], "seconds": 0})[1])
+    monkeypatch.setattr(llm, "sonnet", lambda **_: None)
+    list(agents.graph.stream({"question": "What about snowball?", "history": "EARLIER: avalanche was cheaper"},
+                             stream_mode="custom", version="v2"))
+    assert "EARLIER: avalanche was cheaper" in seen["Route"]
+    assert "EARLIER: avalanche was cheaper" in seen["task"]
+    assert "EARLIER: avalanche was cheaper" in seen["Answer"]

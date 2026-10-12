@@ -35,3 +35,25 @@ def test_slider_keeps_a_custom_payoff_order(tmp_path, monkeypatch):
         assert [a["name"] for a in slid["accounts"]] == order
         back = c.post("/api/payoff-strategy", json={"strategy": "avalanche", "extra_monthly": 900}).json()
         assert back["accounts"][0]["name"].startswith("Visa")
+
+
+def test_chat_sends_the_earlier_turns_to_the_agents_and_bounds_them(tmp_path, monkeypatch):
+    from finagent import agents
+
+    captured = {}
+
+    class FakeGraph:
+        def stream(self, state, **_):
+            captured.update(state)
+            return iter(())
+
+    monkeypatch.setattr(db, "_con", db.connect(tmp_path / "chat.duckdb"))
+    monkeypatch.setattr(llm, "available", lambda: True)
+    monkeypatch.setattr(agents, "graph", FakeGraph())
+    body = {"question": "What about snowball?",
+            "history": [{"question": f"q{i}", "answer": f"a{i}"} for i in range(5)]}
+    with TestClient(app) as c:
+        assert c.post("/api/chat", json=body).status_code == 200
+        assert c.post("/api/chat", json={"question": "hi", "history": [{"question": "q", "answer": "a"}] * 50}).status_code == 422
+    assert captured["question"] == "What about snowball?"
+    assert "q4" in captured["history"] and "q0" not in captured["history"]

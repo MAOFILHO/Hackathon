@@ -63,6 +63,14 @@ def test_minimum_below_interest_is_infeasible():
     assert r.debt_free is None
 
 
+def test_the_minimums_only_baseline_pays_each_debt_its_own_minimum_and_rolls_nothing_over():
+    debts = [Debt("Card", 5000, 0.25, 150), Debt("Car", 8000, 0.065, 250)]
+    alone = [simulate([d], extra=0, strategy="avalanche", start=START) for d in debts]
+    base = compare(debts, extra=500, start=START).baseline
+    assert base.total_interest == pytest.approx(sum(r.total_interest for r in alone), abs=0.01)
+    assert base.months == max(r.months for r in alone)
+
+
 def test_compare_reports_months_sooner_and_interest_saved_vs_minimums():
     debts = [Debt("Card", 5000, 0.25, 150), Debt("Car", 8000, 0.065, 250)]
     c = compare(debts, extra=500, start=START)
