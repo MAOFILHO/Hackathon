@@ -5,7 +5,7 @@ read the user's own Documents and answer with numbers cited back to their Rows. 
 
 Live Web App: https://ai-financial-agent.salmonsky-1761290e.eastus.azurecontainerapps.io/.
 
-The App asks for the Username and Password, which are provided in the WhatsApp Group10.
+The App asks for the Username and Password, which are provided in the Group10 WhatsApp.
 
 ## Tech stack
 
