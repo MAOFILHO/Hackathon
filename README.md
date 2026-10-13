@@ -3,7 +3,9 @@
 A personal financial coach. 4 specialist agents (Debt Analyzer, Payoff Optimizer, Budget Coach, Savings Strategist)
 read the user's own Documents and answer with numbers cited back to their Rows. Vocabulary: see `CONTEXT.md`.
 
-Live Web App: https://ai-financial-agent.salmonsky-1761290e.eastus.azurecontainerapps.io/
+Live Web App: https://ai-financial-agent.salmonsky-1761290e.eastus.azurecontainerapps.io/.
+
+The App asks for the Username and Password, which are provided in the WhatsApp Group10.
 
 ## Tech stack
 
